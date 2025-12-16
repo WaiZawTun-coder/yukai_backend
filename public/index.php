@@ -6,10 +6,13 @@
         $username = "root";
         $password = "W@i1Z@w4Tun2002";
     }else{
-        $host = "database-yukai.j.aivencloud.com";
-        $port = "17662";
-        $username = "avnadmin";
-        $password = "AVNS_pVnMw8HCSmWQ-wNYKNe";
+        require_once __DIR__ . '/../loadEnv.php';
+
+        loadEnv(__DIR__ . '/../.env');
+        $host = $_ENV["DB_HOST"];
+        $port = $_ENV["DB_PORT"];
+        $username = $_ENV["DB_USER"];
+        $password = $_ENV["DB_PASSWORD"];
     }
 
     $databaseName = "yukai";
