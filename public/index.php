@@ -9,10 +9,10 @@
         require_once __DIR__ . '/../loadEnv.php';
 
         loadEnv(__DIR__ . '/../.env');
-        $host = $_ENV["DB_HOST"];
-        $port = $_ENV["DB_PORT"];
-        $username = $_ENV["DB_USER"];
-        $password = $_ENV["DB_PASSWORD"];
+        $host = getenv("DB_HOST");
+        $port = getenv("DB_PORT");
+        $username = getenv("DB_USER");
+        $password = getenv("DB_PASSWORD");
     }
 
     $databaseName = "yukai";
