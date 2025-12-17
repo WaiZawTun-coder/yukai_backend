@@ -11,14 +11,14 @@
                 '/yukai_backend/public/admin.php',
             ],
         ];
-    }else{
-        return [
-            'public' => [
-                "/public/login.php",
-                "/public/register.php"
-            ],
-            'admin' => [
-                "/public/admin.php"
-            ]
-        ];
     }
+return [
+    'public' => [
+        "/login.php",
+        "/register.php"
+    ],
+    'admin' => [
+        "/admin.php"
+    ]
+];
+    
