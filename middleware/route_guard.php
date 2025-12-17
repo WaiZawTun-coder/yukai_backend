@@ -11,18 +11,15 @@ function deny(int $code = 401)
     exit;
 }
 
-
 // 1. Allow PUBLIC routes
 if (in_array($uri, $routes['public'], true)) {
     return;
 }
 
-
 // 2. Block everything else unless logged in
 if (!isset($_SESSION['user_id'])) {
     deny(401);
 }
-
 
 // 3. Extra protection for ADMIN routes
 if (in_array($uri, $routes['admin'], true)) {
