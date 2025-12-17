@@ -1,12 +1,12 @@
 <?php
+    require_once __DIR__ . '/../middleware/route_guard.php';
     include "../utilities/dbconfig.php";
 
     $input = json_decode(file_get_contents('php://input'), true);
     $username = $input["username"];
     $password = $input["password"];
     $response = [];
-    // check if valid credentianal
-    // true
+    
     $checkUsername="select * from users where email=? or username=? ";
     $checkUserstmt = $conn->prepare($checkUsername);//check username and email
     $checkUserstmt->bind_param("ss", $username, $username);

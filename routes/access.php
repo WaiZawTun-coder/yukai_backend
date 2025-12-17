@@ -2,13 +2,11 @@
 
 return [
     'public' => [
-        '/login',
-        '/register',
-        '/health',
+        '/yukai_backend/public/login.php',
+        '/yukai_backend/public/register.php',
     ],
 
     'admin' => [
-        '/admin',
-        '/admin/users',
+        '/yukai_backend/public/admin.php',
     ],
 ];
