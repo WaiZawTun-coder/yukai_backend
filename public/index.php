@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/../middleware/route_guard.php';
+
 require "../utilities/dbconfig.php";
 
 $sql = "SELECT * FROM users";
@@ -10,4 +12,4 @@ if($result->num_rows > 0){
     }
 }else{
     echo "0 results found.";
-}
+}       
