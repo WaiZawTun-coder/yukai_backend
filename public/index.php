@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/../middleware/route_guard.php';
+
 require "../utilities/dbconfig.php";
 
 $sql = "SELECT * FROM users";
