@@ -4,10 +4,6 @@ require_once __DIR__ . '/../bootstrap.php';
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $routes = require __DIR__ . '/../routes/access.php';
 
-print_r($routes);
-
-echo $_SERVER['REQUEST_URI'];
-
 function deny(int $code = 401)
 {
     http_response_code($code);
