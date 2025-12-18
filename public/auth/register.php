@@ -1,6 +1,9 @@
 <?php
 
-include "../utilities/dbconfig.php";
+include "../../utilities/dbconfig.php";
+require_once __DIR__.'/../../services/passwordService.php';
+
+
 $input=json_decode(file_get_contents("php://input"),true);
 $username= $input["username"];
 $password= $input["password"];
@@ -12,10 +15,11 @@ $email= $input["email"];
     $response["status"] = false;
     $response["message"] = "Email already exists";
   }else{
-    $sql1="INSERT INTO users (username, password, email) VALUES(?,?,?)";
-    $result1=$conn->prepare($sql1);
-    $result1->bind_param(  "sss",$username,$password, $email);
-    $result1->execute();
+    $insertUserSql="INSERT INTO users (username, password, email) VALUES(?,?,?)";
+    $hashPwd=passwordService::hash($password);
+    $insertUserStmt=$conn->prepare($insertUserSql);
+    $insertUserStmt->bind_param(  "sss",$username,$hashPwd, $email);
+    $insertUserStmt->execute();
     $response["status"] = true;
     $response["message"] = "Regirstration is successful";
   }
