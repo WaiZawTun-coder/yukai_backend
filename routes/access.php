@@ -3,22 +3,24 @@
     if($server == "localhost"){
         return [
             'public' => [
-                '/yukai_backend/public/login.php',
-                '/yukai_backend/public/register.php',
+                '/yukai_backend/public/',
+                '/yukai_backend/public/auth/login.php',
+                '/yukai_backend/public/auth/register.php',
+                '/yukai_backend/public/auth/refresh.php'
             ],
         
             'admin' => [
                 '/yukai_backend/public/admin.php',
             ],
         ];
-    }else{
-        return [
-            'public' => [
-                "/public/login.php",
-                "/public/register.php"
-            ],
-            'admin' => [
-                "/public/admin.php"
-            ]
-        ];
     }
+return [
+    'public' => [
+        "/auth/login.php",
+        "/auth/register.php"
+    ],
+    'admin' => [
+        "/admin.php"
+    ]
+];
+    

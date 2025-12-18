@@ -1,7 +1,8 @@
 <?php
     // check if route is accessible
-    require_once __DIR__ . '/../middleware/route_guard.php';
-    include "../utilities/dbconfig.php";
+    require_once __DIR__ . '/../../middleware/route_guard.php';
+    require_once __DIR__ . '/../../services/tokenService.php';
+    include "../../utilities/dbconfig.php";
 
     // get input data
     $input = json_decode(file_get_contents('php://input'), true);
@@ -26,6 +27,7 @@
     }
     
     // check password correct
+    // TODO: need to change to hashed password check
     $user = $result->fetch_assoc();
     $checkCorrect = "select * from users where (username=? or email=?) and password=? ";
     $checkCorrectstmt = $conn->prepare($checkCorrect);
@@ -43,9 +45,25 @@
 
     // correct user and password
     // access granted
+    // generate JWT access Token
+    $user = $result->fetch_assoc();
+    $accessToken = TokenService::generateAccessToken($user["user_id"]);
+
+    // generate refresh Token
+    [$refreshToken, $refreshHash] = TokenService::generateRefreshToken();
+    $expireAt = date("Y-m-d H:i:s", time() + 604800); // 7 days
+
+    // store refresh token hash in database
+    $storeSql = "update users set refresh_token=?, refresh_token_expire_time=? where user_id=?";
+    $storeStmt = $conn->prepare($storeSql);
+    $storeStmt->bind_param("ssi", $refreshHash, $expireAt, $user["user_id"]);
+    $storeStmt->execute();
+
     $_SESSION['user_id'] = $user["user_id"];
     $response["status"] = true;
     $response["message"] = "User and Password are correct";
+    $response["accessToken"] = $accessToken;
+    $response["refreshToken"] = $refreshToken;
     echo json_encode($response);
     exit();
     

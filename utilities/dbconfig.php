@@ -2,9 +2,9 @@
     $server = $_SERVER['SERVER_NAME'] ?? "localhost";
     if($server == "localhost"){
         $host = "localhost";
-        $port = "3307";
+        $port = "3306";
         $username = "root";
-        $password = "";
+        $password = "W@i1Z@w4Tun2002";
     }else{
         $host = getenv("DB_HOST");
         $port = getenv("DB_PORT");
@@ -17,6 +17,4 @@
     $conn = new mysqli($host, $username, $password, $databaseName, $port);
     if($conn->connect_error){
         die("Connection failed: " . $conn->connect_error);
-    }else{
-        echo "Connection successfully to $server <br>";
     }
