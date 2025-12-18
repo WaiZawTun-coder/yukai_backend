@@ -2,6 +2,7 @@
     // check if route is accessible
     require_once __DIR__ . '/../../middleware/route_guard.php';
     require_once __DIR__ . '/../../services/tokenService.php';
+    require_once __DIR__ . '/../../services/passwordService.php';
     include "../../utilities/dbconfig.php";
 
     // get input data
@@ -14,7 +15,7 @@
     $response = [];
 
     //check username and email exit
-    $checkUsername="select * from users where email=? or username=? ";
+    $checkUsername="select * from users where email=? or username=?";
     $checkUserstmt = $conn->prepare($checkUsername); 
     $checkUserstmt->bind_param("ss", $username, $username);
     $checkUserstmt->execute();
@@ -25,18 +26,31 @@
         echo json_encode($response);
         exit(); 
     }
-    
+    else{
+        $user = $result->fetch_assoc();
+        if($user['is_active'] == 0){
+            $response["status"] = false;
+            $response["message"] = "Account is inactive";
+            echo json_encode($response);
+            exit(); 
+        }
+
+    }
     // check password correct
     // TODO: need to change to hashed password check
-    $user = $result->fetch_assoc();
-    $checkCorrect = "select * from users where (username=? or email=?) and password=? ";
-    $checkCorrectstmt = $conn->prepare($checkCorrect);
-    $checkCorrectstmt->bind_param("sss", $username, $username, $password);
-    $checkCorrectstmt->execute();
-    $result= $checkCorrectstmt->get_result();
+    // $user = $result->fetch_assoc();
+    echo json_encode($user['password']);
+    if(!PasswordService::verify($password,$user['password'])){ //password hash function
+    // $checkCorrect = "select * from users where (username=? or email=?) and password=? ";
+    // $checkCorrectstmt = $conn->prepare($checkCorrect);
+    // $checkCorrectstmt->bind_param("sss", $username, $username, $password);
+    // $checkCorrectstmt->execute();
+    // $result= $checkCorrectstmt->get_result();
 
+        
+    
     // incorrect password
-    if($result->num_rows==0){
+    // if($result->num_rows==0){
         $response["status"] = false;
         $response["message"] = "You should check your password!";
         echo json_encode($response);
