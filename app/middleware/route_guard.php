@@ -6,7 +6,7 @@ function route_guard() {
 
     if (!isset($headers['Authorization'])) {
         http_response_code(401);
-        echo json_encode(["error" => "Unauthorized"]);
+        echo json_encode(["status" => 401, "error" => "Unauthorized"]);
         exit;
     }
 
@@ -26,5 +26,6 @@ function route_guard() {
     }catch(Exception $e){
         http_response_code(401);
         echo json_encode(["error" => "Invalid Token", "message" => $e->getMessage()]);
+        exit;
     }
 }
