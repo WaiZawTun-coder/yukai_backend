@@ -51,7 +51,7 @@ class AuthController
 
         $user = $result->fetch_assoc();
 
-        // 🔒 BLOCK INCOMPLETE REGISTRATION
+        // BLOCK INCOMPLETE REGISTRATION
         if ((int) $user['completed_step'] < 2) {
             Response::json([
                 "status" => false,
@@ -171,6 +171,8 @@ class AuthController
                 Response::json([
                     "status" => true,
                     "data" => [
+                        "userId" => $userId,
+                        "email" => $email,
                         "generated_username" => $generatedUsername,
                         "access_token" => $accessToken
                     ]
@@ -186,7 +188,8 @@ class AuthController
                 $profileImage = Request::file("profileImage");
 
                 //
-                $header = $_SERVER["HTTP_AUTHORIZATION"] ?? "";
+                $headers = getallheaders();
+                $header = $headers["Authorization"];
                 if (!preg_match('/Bearer\s(\S+)/', $header, $matches)) {
                     Response::json([
                         "status" => false,
