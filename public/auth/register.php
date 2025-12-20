@@ -3,7 +3,6 @@
 include "../../utilities/dbconfig.php";
 require_once __DIR__.'/../../services/passwordService.php';
 
-
 $input=json_decode(file_get_contents("php://input"),true);
 $username= $input["username"];
 $password= $input["password"];
@@ -22,13 +21,9 @@ $email= $input["email"];
     $insertUserStmt->execute();
     $response["status"] = true;
     $response["message"] = "Regirstration is successful";
-  }
-  
+  } 
 //   $response["data"] = ["username" => $username, "password" => $password, "email" =>$email];
 
     echo json_encode($response);
     exit();
-
-
-
 ?>
