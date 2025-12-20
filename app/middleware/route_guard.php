@@ -1,7 +1,8 @@
 <?php
-require_once __DIR__ . "/../../utilities/jwt.php";
+use App\Core\JWT;
 
-function route_guard() {
+function route_guard()
+{
     $headers = getallheaders();
 
     if (!isset($headers['Authorization'])) {
@@ -11,19 +12,19 @@ function route_guard() {
     }
 
     $authHeader = $headers['Authorization'];
-    if(preg_match('/Bearer\s(\S+)/', $authHeader, $matches)){
+    if (preg_match('/Bearer\s(\S+)/', $authHeader, $matches)) {
         $token = $matches[1];
-    }else{
+    } else {
         http_response_code(401);
         echo json_encode(["error" => "Invalid Authorization Header"]);
         exit;
     }
 
-    try{
+    try {
         $secret = $_ENV["JWT_SECRET"];
         $decoded = JWT::decode($token, $secret);
         return $decoded;
-    }catch(Exception $e){
+    } catch (Exception $e) {
         http_response_code(401);
         echo json_encode(["error" => "Invalid Token", "message" => $e->getMessage()]);
         exit;

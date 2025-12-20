@@ -1,4 +1,8 @@
 <?php
+namespace App\Core;
+
+use Exception;
+
 class JWT{
     private static function base64UrlEncode($data){
         return rtrim(strtr(base64_encode($data), "+/", "-_"), "=");
