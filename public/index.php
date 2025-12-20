@@ -1,18 +1,16 @@
 <?php
-require_once __DIR__ . '/../middleware/route_guard.php';
-require_once __DIR__ . '/../middleware/auth.php';
+require_once __DIR__ . "/../bootstrap.php";
+require_once __DIR__ . "/../routes/api.php";
+require_once __DIR__ . '/../app/Core/Database.php';
+require_once __DIR__ . "/../app/Core/Request.php";
+require_once __DIR__ . "/../app/Core/Response.php";
+require_once __DIR__ . "/../app/Core/Generator.php";
+require_once __DIR__ . "/../app/Core/JWT.php";
 
-require "../utilities/dbconfig.php";
+require_once __DIR__ . "/../app/services/passwordService.php";
+require_once __DIR__ . "/../app/services/tokenService.php";
+require_once __DIR__ . "/../app/services/imageService.php";
 
-$sql = "SELECT * FROM users";
-$result = $conn->query($sql);
+require_once __DIR__ . "/../app/Controllers/AuthController.php";
 
-echo $tokenUser["user_id"] ?? "No user found in token." . "<br>";
-
-if($result->num_rows > 0){
-    while($row = $result->fetch_assoc()){
-        echo "User ID: " . $row['user_id'] . " - Name: " . $row["username"] . "<br>";
-    }
-}else{
-    echo "0 results found.";
-}       
+Router::dispatch();
