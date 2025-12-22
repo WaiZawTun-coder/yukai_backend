@@ -12,5 +12,5 @@ require_once __DIR__ . "/../app/services/tokenService.php";
 require_once __DIR__ . "/../app/services/imageService.php";
 
 require_once __DIR__ . "/../app/Controllers/AuthController.php";
-
+require_once __DIR__ . "/../app/Controllers/PostController.php";
 Router::dispatch();
