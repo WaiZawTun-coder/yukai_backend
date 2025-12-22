@@ -88,8 +88,6 @@ class ImageService
             ], 500);
         }
 
-        echo $response;
-
         $result = json_decode($response, true);
 
         // print_r($result);
