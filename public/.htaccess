@@ -1,6 +1,7 @@
 # Enable CORS for localhost:3000
 <IfModule mod_headers.c>
     Header always set Access-Control-Allow-Origin "http://localhost:3000"
+    Header always set Access-Control-Allow-Origin "https://yukai-frontend.vercel.app"
     Header always set Access-Control-Allow-Methods "GET,POST,OPTIONS,DELETE,PUT"
     Header always set Access-Control-Allow-Headers "Content-Type, Authorization"
     Header always set Access-Control-Allow-Credentials "true"
