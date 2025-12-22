@@ -87,7 +87,14 @@ class AuthController
         $update->bind_param("ssi", $refreshHash, $expireAt, $user['user_id']);
         $update->execute();
 
-        $isSecure = getenv("IS_SECURE") === "true";
+        $isSecure =
+            (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ||
+                isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https'
+                ?
+                'https'
+                :
+                'http') == "https";
+
 
         setcookie("refresh_token", $refreshToken, [
             "expires" => time() + 60 * 60 * 24 * 30,
@@ -169,6 +176,7 @@ class AuthController
 
                 Response::json([
                     "status" => true,
+                    "step" => 2,
                     "data" => [
                         "userId" => $userId,
                         "email" => $email,
@@ -294,7 +302,7 @@ class AuthController
 
                 $updateStmt->execute();
 
-                if ($updateStmt->affected_rows === 0) {
+                if ($updateStmt->affected_rows == 0) {
                     Response::json([
                         "status" => false,
                         "message" => "Registration failed - step 2"
@@ -374,7 +382,13 @@ class AuthController
         $update->execute();
 
         // Set new refresh token cookie
-        $isSecure = getenv("IS_SECURE") === "true";
+        $isSecure =
+            (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ||
+                isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https'
+                ?
+                'https'
+                :
+                'http') == "https";
 
         setcookie("refresh_token", $newRefreshToken, [
             "expires" => time() + 60 * 60 * 24 * 30,

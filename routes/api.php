@@ -6,18 +6,19 @@ use App\public\auth\post;
 Router::add("GET", "/", function () {
     AuthController::index();
 }, false);
-Router::add("POST", "/api/login", function () {
+Router::add("POST", "/auth/login", function () {
     AuthController::login();
 }, false);
-Router::add("POST", "/api/register", function () {
+Router::add("POST", "/auth/register", function () {
     AuthController::register();
 }, false);
-Router::add("POST", "/api/register/{username}", function ($username) {
+Router::add("POST", "/auth/register/{username}", function ($username) {
     AuthController::register($username);
 }, true);
 
 Router::add("POST", "/auth/refresh", function () {
-    AuthController::refresh(); }, false);
+    AuthController::refresh();
+}, false);
 
 Router::add("POST", "/api/postOutput", function () {
     PostController::postOutput(); }, false);
