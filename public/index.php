@@ -31,10 +31,7 @@ require_once __DIR__ . "/../app/services/tokenService.php";
 require_once __DIR__ . "/../app/services/imageService.php";
 
 require_once __DIR__ . "/../app/Controllers/AuthController.php";
-<<<<<<< HEAD
 require_once __DIR__ . "/../app/Controllers/PostController.php";
 Router::dispatch();
-=======
 
-Router::dispatch();
->>>>>>> 652cf2ee29c9b43328576f50478f7e905e4cb2ef
+
