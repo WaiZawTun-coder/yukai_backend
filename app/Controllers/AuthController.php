@@ -98,7 +98,7 @@ class AuthController
 
         setcookie("refresh_token", $refreshToken, [
             "expires" => time() + 60 * 60 * 24 * 30,
-            "path" => "/auth/refresh",
+            "path" => "/",
             "secure" => $isSecure,
             "httponly" => true,
             "samesite" => "Strict"
@@ -169,7 +169,7 @@ class AuthController
 
                 setcookie("refresh_token", $refreshToken, [
                     "expires" => time() + 60 * 60 * 24 * 30,
-                    "path" => "/auth/refresh",
+                    "path" => "/",
                     "httponly" => true,
                     "samesite" => "Strict"
                 ]);
@@ -392,7 +392,7 @@ class AuthController
 
         setcookie("refresh_token", $newRefreshToken, [
             "expires" => time() + 60 * 60 * 24 * 30,
-            "path" => "/auth/refresh",
+            "path" => "/",
             "secure" => $isSecure,
             "httponly" => true,
             "samesite" => "Strict"
