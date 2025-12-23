@@ -19,9 +19,9 @@ class PostController{
                     - (TIMESTAMPDIFF(SECOND, p.created_at, NOW()) * 0.00001)
                 ) AS score
                 FROM posts p LEFT JOIN react r ON r.post_id = p.post_id LEFT JOIN comment c ON c.post_id = p.post_id
-                WHERE p.is_deleted = 0
+                WHERE p.is_deleted = 0 and (select * from posts where created_at >= DATE(CURRENT_TIMESTAMP)
                 GROUP BY p.post_id ORDER BY score DESC Limit 10");
-            $result = $conn->query($sql);
+                $result = $conn->query($sql);
                 
                 if (!$result) {
                     throw new \Exception("Query failed: " . $conn->error);
