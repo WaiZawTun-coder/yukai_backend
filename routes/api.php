@@ -28,7 +28,10 @@ Router::add("GET", "/api/getUser", function () {
     UserController::user(); }, true);
 
 Router::add("GET", "/api/getUserPost", function () {
-    PostController::userPost(); }, true);   
+    PostController::userPost(); }, true); 
+
+Router::add("GET", "/api/getFollowingpost", function () {
+    PostController::followingpost(); }, false);   
 
 // protected routes
 Router::add("GET", "/api/profile", function () {
