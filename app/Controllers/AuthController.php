@@ -77,7 +77,7 @@ class AuthController
         $accessToken = TokenService::generateAccessToken($user['user_id']);
         [$refreshToken, $refreshHash] = TokenService::generateRefreshToken();
 
-        $expireAt = date("Y-m-d H:i:s", time() + 60 * 60 * 24 * 30);
+        $expireAt = date("Y-m-d H:i:s", time() + 60 * 60 * 24 * 7);
 
         $update = $conn->prepare("
             UPDATE users 
@@ -97,7 +97,7 @@ class AuthController
 
 
         setcookie("refresh_token", $refreshToken, [
-            "expires" => time() + 60 * 60 * 24 * 30,
+            "expires" => time() + 60 * 60 * 24 * 7,
             "path" => "/",
             "secure" => $isSecure,
             "httponly" => true,
@@ -169,7 +169,7 @@ class AuthController
                 [$refreshToken, $refreshHash] = TokenService::generateRefreshToken();
 
                 setcookie("refresh_token", $refreshToken, [
-                    "expires" => time() + 60 * 60 * 24 * 30,
+                    "expires" => time() + 60 * 60 * 24 * 7,
                     "path" => "/",
                     "httponly" => true,
                     "samesite" => "Strict"
@@ -372,7 +372,7 @@ class AuthController
         // Rotate refresh token
         [$newRefreshToken, $newRefreshHash] = TokenService::generateRefreshToken();
 
-        $newExpire = date("Y-m-d H:i:s", time() + 60 * 60 * 24 * 30);
+        $newExpire = date("Y-m-d H:i:s", time() + 60 * 60 * 24 * 7);
 
         $update = $conn->prepare("
         UPDATE users 
@@ -392,7 +392,7 @@ class AuthController
                 'http') == "https";
 
         setcookie("refresh_token", $newRefreshToken, [
-            "expires" => time() + 60 * 60 * 24 * 30,
+            "expires" => time() + 60 * 60 * 24 * 7,
             "path" => "/",
             "secure" => $isSecure,
             "httponly" => true,
