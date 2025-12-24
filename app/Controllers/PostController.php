@@ -7,7 +7,7 @@ use App\Core\Request;;
 class PostController
 {
 
-    public static function post()
+    public static function getPosts()
     //return the post
     {
         $conn = Database::connect();
@@ -27,10 +27,7 @@ class PostController
                     GROUP BY p.post_id ORDER BY total_engagement DESC,p.created_at DESC 
                     LIMIT $resultsPerPage OFFSET $startFrom");
         $result = $conn->query($sql);
-        $sqlTotal = "SELECT COUNT(*) AS total_posts FROM posts WHERE is_deleted = 0";
-        $resultTotal = $conn->query($sqlTotal);
-        $rowTotal = $resultTotal->fetch_assoc();
-        $totalPosts = (int) $rowTotal['total_posts'];
+        $totalPosts = (int) self::getPostCount();
         $totalPages = ceil($totalPosts / $resultsPerPage);
 
         // if ($result->num_rows==0) {
@@ -54,7 +51,7 @@ class PostController
 
     }
     // return the post depends on user_id
-    public static function userPost(){
+    public static function getPostsByUserId(){
         $conn = Database::connect();
         $input = Request::json();
         $user_id = (int)($input['user_id'] ?? 0);
@@ -96,18 +93,9 @@ class PostController
         while ($row = $postResult->fetch_assoc()) {
             $posts[] = $row;
         }
-        $countSql = "
-            SELECT COUNT(*) AS total_posts
-            FROM posts
-            WHERE is_deleted = 0 AND creater_id = ?
-        ";
+        
 
-        $countStmt = $conn->prepare($countSql);
-        $countStmt->bind_param("i", $user_id);
-        $countStmt->execute();
-        $countResult = $countStmt->get_result();
-
-        $totalPosts = (int)$countResult->fetch_assoc()['total_posts'];
+        $totalPosts = (int)self::getPostCount($user_id);
         $totalPages = ceil($totalPosts / $resultsPerPage);
         Response::json([
             "status" => true,
@@ -119,11 +107,11 @@ class PostController
 
     }
     // retrun the post depends on the following_id
-    public static function followingpost(){
+    public static function getFollowingPosts(){
 
         $conn = Database::connect();
         $input = Request::json();
-        $user_id = (int)($input['user_id'] ?? 0);
+        $user_id = (int)($input['user_id'] ?? 0); // username or userId
 
         $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
         $resultsPerPage = 5;
@@ -163,20 +151,7 @@ class PostController
         while ($row = $postResult->fetch_assoc()) {
             $posts[] = $row;
         }
-        $countSql = "
-            SELECT COUNT(*) AS total_posts
-            FROM posts p
-            INNER JOIN follows f on f.following_id=p.creater_id 
-            AND f.follower_id=?
-            WHERE is_deleted = 0 
-        ";
-
-        $countStmt = $conn->prepare($countSql);
-        $countStmt->bind_param("i", $user_id);
-        $countStmt->execute();
-        $countResult = $countStmt->get_result();
-
-        $totalPosts = (int)$countResult->fetch_assoc()['total_posts'];
+        $totalPosts = (int)self::getFollowingPostCount($user_id);
         $totalPages = ceil($totalPosts / $resultsPerPage);
         Response::json([
             "status" => true,
@@ -185,5 +160,45 @@ class PostController
             "totalPages" => $totalPages,
             "data"=>$posts
         ]);
+    }
+
+    private static function getPostCount($userId = 0){
+        $conn = Database::connect();
+        // no user id
+        if($userId = 0){
+            $sqlTotal = "SELECT COUNT(*) AS total_posts FROM posts WHERE is_deleted = 0";
+            $resultTotal = $conn->query($sqlTotal);
+            $rowTotal = $resultTotal->fetch_assoc();
+        }
+        // with user id
+        else {
+            $countSql = "
+            SELECT COUNT(*) AS total_posts
+            FROM posts
+            WHERE is_deleted = 0 AND creater_id = ?
+        ";
+
+        $countStmt = $conn->prepare($countSql);
+        $countStmt->bind_param("i", $user_id);
+        $countStmt->execute();
+        $countResult = $countStmt->get_result();
+        }
+    }
+    private static function getFollowingPostCount($userId=0){
+         $conn = Database::connect();
+        
+        $sql = "
+            SELECT COUNT(DISTINCT p.post_id) AS total_posts
+            FROM posts p
+            INNER JOIN follows f ON f.following_id = p.creater_id 
+                AND f.follower_id = ?
+            WHERE p.is_deleted = 0
+        ";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $userId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
     }
 }

@@ -22,16 +22,16 @@ Router::add("POST", "/auth/refresh", function () {
 }, false);
 
 Router::add("GET", "/api/getPost", function () {
-    PostController::post(); },true);
+    PostController::getPosts(); },true);
 
 Router::add("GET", "/api/getUser", function () {
     UserController::user(); }, true);
 
 Router::add("GET", "/api/getUserPost", function () {
-    PostController::userPost(); }, true); 
+    PostController::getPostsByUserId(); }, true); 
 
 Router::add("GET", "/api/getFollowingpost", function () {
-    PostController::followingpost(); }, false);   
+    PostController::getFollowingPosts(); }, true);   
 
 // protected routes
 Router::add("GET", "/api/profile", function () {
