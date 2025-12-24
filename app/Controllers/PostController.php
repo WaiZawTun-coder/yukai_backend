@@ -6,7 +6,8 @@ use App\Core\Response;
 class PostController
 {
 
-    public static function postOutput()
+    public static function post()
+    //return the post data
     {
         $conn = Database::connect();
         // header("Content-Type: application/json");

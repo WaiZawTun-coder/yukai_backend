@@ -7,7 +7,8 @@ use App\Core\Request;
 
 class UserController
 {
-    public static function userOutput()
+    //return the user data
+    public static function user()
     {
         $conn = Database::connect();
         $input = Request::json();
