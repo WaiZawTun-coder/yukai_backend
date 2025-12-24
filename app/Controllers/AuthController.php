@@ -158,7 +158,6 @@ class AuthController
 
                 $generatedUsername = Generator::generateUsername($username);
                 $hash = PasswordService::hash($password);
-
                 $stmt = $conn->prepare("INSERT INTO users (username, display_username, password, email, completed_step) VALUES (?, ?, ?, ?, 1)");
                 $stmt->bind_param("ssss", $generatedUsername, $username, $hash, $email);
                 $stmt->execute();
