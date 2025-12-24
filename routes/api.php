@@ -2,7 +2,7 @@
 use App\Controllers\AuthController;
 use App\Controllers\PostController;
 use App\Controllers\UserController;
-use App\public\auth\post;
+
 // public routes
 Router::add("GET", "/", function () {
     AuthController::index();
@@ -22,10 +22,12 @@ Router::add("POST", "/auth/refresh", function () {
 }, false);
 
 Router::add("POST", "/api/postOutput", function () {
-    PostController::postOutput(); }, false);
+    PostController::postOutput();
+}, false);
 
 Router::add("POST", "/api/userOutput", function () {
-    UserController::userOutput(); }, false);
+    UserController::userOutput();
+}, false);
 
 // protected routes
 Router::add("GET", "/api/profile", function () {
