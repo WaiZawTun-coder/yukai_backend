@@ -27,6 +27,9 @@ Router::add("GET", "/api/getPost", function () {
 Router::add("GET", "/api/getUser", function () {
     UserController::user(); }, true);
 
+Router::add("GET", "/api/getUserPost", function () {
+    PostController::userPost(); }, true);   
+
 // protected routes
 Router::add("GET", "/api/profile", function () {
     AuthController::index();
