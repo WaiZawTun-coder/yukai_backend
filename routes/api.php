@@ -21,13 +21,17 @@ Router::add("POST", "/auth/refresh", function () {
     AuthController::refresh();
 }, false);
 
-Router::add("POST", "/api/postOutput", function () {
-    PostController::postOutput();
-}, false);
+Router::add("GET", "/api/getPost", function () {
+    PostController::getPosts(); },true);
 
-Router::add("POST", "/api/userOutput", function () {
-    UserController::userOutput();
-}, false);
+Router::add("GET", "/api/getUser", function () {
+    UserController::user(); }, true);
+
+Router::add("GET", "/api/getUserPost", function () {
+    PostController::getPostsByUserId(); }, true); 
+
+Router::add("GET", "/api/getFollowingpost", function () {
+    PostController::getFollowingPosts(); }, true);   
 
 // protected routes
 Router::add("GET", "/api/profile", function () {
