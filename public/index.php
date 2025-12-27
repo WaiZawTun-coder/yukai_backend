@@ -2,7 +2,7 @@
 
 $allowedOrigins = [
     "http://localhost:3000",
-    "https://yukai-frontend.vercel.app"
+    "https://yukai-frontend.vercel.app",
 ];
 
 if (isset($_SERVER['HTTP_ORIGIN']) && in_array($_SERVER['HTTP_ORIGIN'], $allowedOrigins)) {
