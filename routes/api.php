@@ -48,3 +48,11 @@ Router::add("GET", "/api/get-following-post", function () {
 Router::add("POST", "/api/create-post", function () {
     PostController::createPost();
 }, true); // create post
+
+Router::add("POST", "/api/react-post", function () {
+    PostController::reactPost();
+}, false); // insert react
+
+Router::add("POST", "/api/comment-post", function () {
+    PostController::commentPost();
+}, false); // insert comment
