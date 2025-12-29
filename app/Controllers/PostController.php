@@ -191,7 +191,7 @@ class PostController
             SELECT COUNT(DISTINCT p.post_id) AS total_posts
             FROM posts p
             INNER JOIN follows f ON f.following_id = p.creater_id 
-                AND f.follower_id = ?
+            AND f.follower_id = ?
             WHERE p.is_deleted = 0
         ";
 

@@ -18,8 +18,8 @@ class UserController
             SELECT user_id, username, display_username, gender, email,
                    phone_number, profile_image, cover_image, birthday,
                    location, is_active, last_seen, default_audience
-            FROM users
-            WHERE user_id = ?
+                   FROM users
+                   WHERE user_id = ?
         ";
 
         $stmt = $conn->prepare($userSql);
@@ -39,7 +39,7 @@ class UserController
         
         Response::json([
             "status" => true,
-            "message" => "User and posts are as follow",
+            "message" => "User are as follow",
             "data"=>$user
         ]);
     }

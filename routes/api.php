@@ -25,10 +25,10 @@ Router::add("GET", "/api/getPost", function () {
     PostController::getPosts(); },true);
 
 Router::add("GET", "/api/getUser", function () {
-    UserController::user(); }, true);
+    UserController::user(); },true);
 
 Router::add("GET", "/api/getUserPost", function () {
-    PostController::getPostsByUserId(); }, true); 
+    PostController::getPostsByUserId(); },true); 
 
 Router::add("GET", "/api/getFollowingpost", function () {
     PostController::getFollowingPosts(); }, true);   
