@@ -22,24 +22,11 @@ Router::add("POST", "/auth/refresh", function () {
 }, false);
 
 
-<<<<<<< HEAD
-Router::add("GET", "/api/getUser", function () {
-    UserController::user(); },true);
-
-Router::add("GET", "/api/getUserPost", function () {
-    PostController::getPostsByUserId(); },true); 
-
-Router::add("GET", "/api/getFollowingpost", function () {
-    PostController::getFollowingPosts(); }, true);   
-
-// protected routes
-=======
 // users
 Router::add("GET", "/api/get-user", function () {
     UserController::getUser();
 }, true);
 
->>>>>>> 0806f4fc5b9363677a37b44eb84c3c12e7ce00ed
 Router::add("GET", "/api/profile", function () {
     AuthController::index();
 }, true);
