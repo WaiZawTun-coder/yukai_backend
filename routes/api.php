@@ -2,7 +2,7 @@
 use App\Controllers\AuthController;
 use App\Controllers\PostController;
 use App\Controllers\UserController;
-use App\public\auth\post;
+
 // public routes
 Router::add("GET", "/", function () {
     AuthController::index();
