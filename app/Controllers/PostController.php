@@ -391,6 +391,51 @@ class PostController
             ], 500);
         }
     }
+    /* =====================================================
+     *  Insert React
+     * ===================================================== */
+    public static function reactPost(){
+        $conn = Database::connect();
+        $input = Request::json();
+
+        $user_id = (int) (Request::input("user_id") ?? 0);
+        $post_id = (int)(Request::input("post_id") ?? 0);
+        $reaction_type = trim(Request::input("reaction_type") ?? 'like');
+
+        $sql="Insert into react(post_id,user_id,reaction_type) values (?,?,?)";
+
+        $stmtReact=$conn->prepare($sql);;
+        $stmtReact->bind_param("iis",$user_id,$post_id,$reaction_type);;
+        $stmtReact->execute();
+        Response::json([
+            "status"=>true,
+            "message"=>"Added Successfully"
+        ]);
+        
+    }
+
+    /* =====================================================
+     *  Insert Comment
+     * ===================================================== */
+    public static function commentPost(){
+        $conn = Database::connect();
+        $input = Request::json();
+
+        $user_id = (int) (Request::input("user_id") ?? 0);
+        $post_id = (int)(Request::input("post_id") ?? 0);
+        $comment = trim(Request::input("comment") ?? null);
+
+        $sql="Insert into comment(post_id,user_id,comment) values (?,?,?)";
+
+        $stmtReact=$conn->prepare($sql);;
+        $stmtReact->bind_param("iis",$user_id,$post_id,$comment);;
+        $stmtReact->execute();
+        Response::json([
+            "status"=>true,
+            "message"=>"Added Successfully"
+        ]);
+        
+    }
 
 
     /* =====================================================
@@ -431,9 +476,9 @@ class PostController
             INNER JOIN follows f ON f.following_id = p.creater_id 
                 AND f.follower_id = ?
             WHERE p.is_deleted = 0
-        ";
+        ");
 
-        $stmt = $conn->prepare($sql);
+        $stmt = $conn->prepare($stmt);
         $stmt->bind_param("i", $userId);
         $stmt->execute();
         $result = $stmt->get_result();

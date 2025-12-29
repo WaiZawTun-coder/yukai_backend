@@ -38,13 +38,11 @@ class UserController
         $user = $result->fetch_assoc();
 
         Response::json([
-            "status" => true,
-<<<<<<< HEAD
-            "message" => "User are as follow",
+            "status"=>true,
+            "message"=>"Users are as follow",
             "data"=>$user
-=======
-            "data" => $user
->>>>>>> 0806f4fc5b9363677a37b44eb84c3c12e7ce00ed
-        ]);
+        ]
+
+        );
     }
 }
