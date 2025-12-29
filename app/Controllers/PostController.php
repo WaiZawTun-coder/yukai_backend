@@ -402,16 +402,54 @@ class PostController
         $post_id = (int)(Request::input("post_id") ?? 0);
         $reaction_type = trim(Request::input("reaction_type") ?? 'like');
 
+        $checkReact="select reaction_type from react where user_id=? and post_id=?";
+        $checkStmt=$conn->prepare($checkReact);
+        $checkStmt->bind_param("ii",$user_id,$post_id);
+        $checkStmt->execute();
+        $checkResult = $checkStmt->get_result();
+        if($checkResult->num_rows>0){ //check reaction_type is already exist?
+            $existing=$checkResult->fetch_assoc();
+            if ($existing['reaction_type'] === $reaction_type) {
+                    //delete react
+                    $deleteSql = "DELETE FROM react WHERE user_id = ? AND post_id = ?";
+                    $deleteStmt = $conn->prepare($deleteSql);
+                    $deleteStmt->bind_param("ii", $user_id, $post_id);
+                    $deleteStmt->execute();
+                    
+                    Response::json([
+                        "status" => true,
+                        "message" => "Reaction removed successfully"
+                    ]);
+                }
+                else{
+                
+                 // Update
+                $reactUpdate= $conn->prepare(
+                    "UPDATE react SET reaction_type=? WHERE post_id=? AND user_id=?"
+                );
+                $reactUpdate->bind_param("sii", $reaction_type, $post_id, $user_id);
+                $reactUpdate->execute();
+
+                Response::json([
+                    "status"=>true,
+                    "message"=>"Update Successfully"
+                ]);
+            }
+            
+        }
+        //insert react
+        else{
         $sql="Insert into react(post_id,user_id,reaction_type) values (?,?,?)";
 
-        $stmtReact=$conn->prepare($sql);;
+        $stmtReact=$conn->prepare($sql);
         $stmtReact->bind_param("iis",$user_id,$post_id,$reaction_type);;
         $stmtReact->execute();
         Response::json([
             "status"=>true,
             "message"=>"Added Successfully"
         ]);
-        
+    
+        }
     }
 
     /* =====================================================

@@ -49,10 +49,10 @@ Router::add("POST", "/api/create-post", function () {
     PostController::createPost();
 }, true); // create post
 
-Router::add("POST", "/api/create-react", function () {
+Router::add("POST", "/api/react-post", function () {
     PostController::reactPost();
-}, true); // insert react
+}, false); // insert react
 
-Router::add("POST", "/api/create-comment", function () {
+Router::add("POST", "/api/comment-post", function () {
     PostController::commentPost();
-}, true); // insert comment
+}, false); // insert comment
