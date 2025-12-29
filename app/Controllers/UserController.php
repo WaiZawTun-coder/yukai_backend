@@ -8,11 +8,11 @@ use App\Core\Request;
 class UserController
 {
     //return the user data
-    public static function user()
+    public static function getUser()
     {
         $conn = Database::connect();
         $input = Request::json();
-        $user_id = (int)($input['user_id'] ?? 0);
+        $user_id = (int) ($input['user_id'] ?? 0);
 
         $userSql = "
             SELECT user_id, username, display_username, gender, email,
@@ -32,15 +32,19 @@ class UserController
                 "status" => false,
                 "message" => "User not found"
             ], 404);
-        
+
         }
 
         $user = $result->fetch_assoc();
-        
+
         Response::json([
             "status" => true,
+<<<<<<< HEAD
             "message" => "User are as follow",
             "data"=>$user
+=======
+            "data" => $user
+>>>>>>> 0806f4fc5b9363677a37b44eb84c3c12e7ce00ed
         ]);
     }
 }

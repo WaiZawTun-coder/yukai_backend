@@ -2,7 +2,7 @@
 
 $allowedOrigins = [
     "http://localhost:3000",
-    "https://yukai-frontend.vercel.app"
+    "https://yukai-frontend.vercel.app",
 ];
 
 if (isset($_SERVER['HTTP_ORIGIN']) && in_array($_SERVER['HTTP_ORIGIN'], $allowedOrigins)) {
@@ -25,6 +25,8 @@ require_once __DIR__ . "/../app/Core/Request.php";
 require_once __DIR__ . "/../app/Core/Response.php";
 require_once __DIR__ . "/../app/Core/Generator.php";
 require_once __DIR__ . "/../app/Core/JWT.php";
+require_once __DIR__ . "/../app/Core/Router.php";
+require_once __DIR__ . "/../app/Core/Auth.php";
 
 require_once __DIR__ . "/../app/services/passwordService.php";
 require_once __DIR__ . "/../app/services/tokenService.php";
