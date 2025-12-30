@@ -56,3 +56,12 @@ Router::add("POST", "/api/react-post", function () {
 Router::add("POST", "/api/comment-post", function () {
     PostController::commentPost();
 }, false); // insert comment
+
+Router::add("POST", "/api/delete-comment", function () {
+    PostController::commentDelete();
+}, false); // delete comment
+
+Router::add("POST", "/api/delete-post", function () {
+    PostController::postDelete();
+}, false); // delete post
+

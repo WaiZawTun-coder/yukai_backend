@@ -391,6 +391,7 @@ class PostController
             ], 500);
         }
     }
+
     /* =====================================================
      *  Insert React
      * ===================================================== */
@@ -451,6 +452,57 @@ class PostController
     
         }
     }
+    /* =====================================================
+     *  Delete Post
+     * ===================================================== */
+    public static function postDelete(){
+        $conn = Database::connect();
+        $input = Request::json();
+        $post_id = (int) (Request::input("post_id") ?? 0);
+        $creater_id=(int)(Request::input("creater_id") ?? 0);
+
+        //check is_deleted
+        $checkSql = "SELECT is_deleted FROM posts WHERE post_id = ? AND creater_id = ?";
+        $checkStmt = $conn->prepare($checkSql);
+        $checkStmt->bind_param("ii", $post_id, $creater_id);
+        $checkStmt->execute();
+        $result = $checkStmt->get_result();
+
+        if ($result->num_rows === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Post not found"
+            ]);
+            return;
+        }
+
+        $row = $result->fetch_assoc();
+        if ((int)$row['is_deleted'] === 1) {
+            Response::json([
+                "status" => false,
+                "message" => "Post already deleted"
+            ]);
+            return;
+        }
+
+        $deletePost="Update posts set is_deleted=1, updated_at=Now() where post_id=? and creater_id=? and is_deleted=0";
+        $stmtPost=$conn->prepare($deletePost);
+        $stmtPost->bind_param("ii",$post_id,$creater_id);
+        $stmtPost->execute();
+        if($stmtPost->affected_rows==0){
+            Response::json([
+                "status"=>false,
+                "message"=>"Post and User are not found"
+            ]);
+        }
+        else{
+            Response::json([
+                "status"=>true,
+                "message"=>"Deleted Successfully"
+            ]);
+        }
+    }
+
 
     /* =====================================================
      *  Insert Comment
@@ -473,6 +525,57 @@ class PostController
             "message"=>"Added Successfully"
         ]);
         
+    }
+
+    /* =====================================================
+     *  Comment Delete
+     * ===================================================== */
+    public static function commentDelete(){
+        $conn = Database::connect();
+        $input = Request::json();
+        $user_id = (int) (Request::input("user_id") ?? 0);
+        $comment_id=(int)(Request::input("comment_id") ?? 0);
+
+        //check is_deleted
+        $checkSql = "SELECT is_deleted FROM comment WHERE comment_id = ? AND user_id = ?";
+        $checkStmt = $conn->prepare($checkSql);
+        $checkStmt->bind_param("ii", $comment_id, $user_id);
+        $checkStmt->execute();
+        $result = $checkStmt->get_result();
+
+        if ($result->num_rows === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Comment not found"
+            ]);
+            return;
+        }
+
+        $row = $result->fetch_assoc();
+        if ((int)$row['is_deleted'] === 1) {
+            Response::json([
+                "status" => false,
+                "message" => "Comment already deleted"
+            ]);
+            return;
+        }
+
+        $updateComment="Update comment set is_deleted=1, updated_at=Now() where comment_id=? and user_id=? and is_deleted=0";
+        $stmtComment=$conn->prepare($updateComment);
+        $stmtComment->bind_param("ii",$user_id,$comment_id);
+        $stmtComment->execute();
+        if($stmtComment->affected_rows==0){
+            Response::json([
+                "status"=>false,
+                "message"=>"Comment and User are not found"
+            ]);
+        }
+        else{
+            Response::json([
+                "status"=>true,
+                "message"=>"Deleted Successfully"
+            ]);
+        }
     }
 
 
