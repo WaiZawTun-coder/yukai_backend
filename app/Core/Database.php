@@ -4,10 +4,12 @@ namespace App\Core;
 use mysqli;
 use mysqli_sql_exception;
 
-class Database {
+class Database
+{
     private static ?mysqli $conn = null;
 
-    public static function connect(): mysqli {
+    public static function connect(): mysqli
+    {
         if (self::$conn !== null) {
             return self::$conn;
         }
@@ -37,13 +39,22 @@ class Database {
         return self::$conn;
     }
 
-    private static function config(): array {
+    private static function config(): array
+    {
         return [
+<<<<<<< HEAD
             "host"     => getenv("DB_HOST")     ?: "127.0.0.1",
             "port"     => (int)(getenv("DB_PORT") ?: 3307),
             "user"     => getenv("DB_USER")     ?: "root",
             "password" => getenv("DB_PASSWORD") ?: "",
             "database" => getenv("DB_NAME")     ?: "yukai",
+=======
+            "host" => getenv("DB_HOST") ?: "127.0.0.1",
+            "port" => (int) (getenv("DB_PORT") ?: 3307),
+            "user" => getenv("DB_USER") ?: "root",
+            "password" => getenv("DB_PASSWORD") ?: "",
+            "database" => getenv("DB_NAME") ?: "yukai",
+>>>>>>> e2125db42423580ca46278fc98b4fb7bbbc24280
         ];
     }
 }

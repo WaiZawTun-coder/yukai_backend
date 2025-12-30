@@ -1,5 +1,6 @@
 <?php
 use App\Core\JWT;
+use App\Core\Auth;
 
 function route_guard()
 {
@@ -23,6 +24,7 @@ function route_guard()
     try {
         $secret = $_ENV["JWT_SECRET"];
         $decoded = JWT::decode($token, $secret);
+        Auth::setUser($decoded);
         return $decoded;
     } catch (Exception $e) {
         http_response_code(401);

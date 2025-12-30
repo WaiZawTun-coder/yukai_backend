@@ -1,6 +1,7 @@
 <?php
 namespace App\Controllers;
 
+use App\Core\Auth;
 use App\Core\JWT;
 use App\Core\Request;
 use App\Core\Response;
@@ -15,7 +16,43 @@ class AuthController
 {
     public static function index()
     {
-        echo json_encode(["message" => "authController"]);
+        $conn = Database::connect();
+        $user = Auth::getUser();
+        $user_id = $user["user_id"];
+
+        if ($user_id == null)
+            Response::json([
+                "status" => false,
+                "message" => "Invalid user id"
+            ], 404);
+
+        $userSql = "
+            SELECT user_id, username, display_username, gender, email,
+                   phone_number, profile_image, cover_image, birthday,
+                   location, is_active, last_seen, default_audience
+            FROM users
+            WHERE user_id = ?
+        ";
+
+        $stmt = $conn->prepare($userSql);
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        if ($result->num_rows === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "User not found"
+            ], 404);
+
+        }
+
+        $user = $result->fetch_assoc();
+
+        Response::json([
+            "status" => true,
+            "data" => $user
+        ]);
     }
 
     public static function login()
@@ -77,7 +114,7 @@ class AuthController
         $accessToken = TokenService::generateAccessToken($user['user_id']);
         [$refreshToken, $refreshHash] = TokenService::generateRefreshToken();
 
-        $expireAt = date("Y-m-d H:i:s", time() + 60 * 60 * 24 * 30);
+        $expireAt = date("Y-m-d H:i:s", time() + 60 * 60 * 24 * 7);
 
         $update = $conn->prepare("
             UPDATE users 
@@ -87,25 +124,35 @@ class AuthController
         $update->bind_param("ssi", $refreshHash, $expireAt, $user['user_id']);
         $update->execute();
 
-        $isSecure = getenv("IS_SECURE") === "true";
+        $isSecure =
+            (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
+
 
         setcookie("refresh_token", $refreshToken, [
-            "expires" => time() + 60 * 60 * 24 * 30,
-            "path" => "/auth/refresh",
+            "expires" => time() + 60 * 60 * 24 * 7,
+            "path" => "/",
             "secure" => $isSecure,
             "httponly" => true,
-            "samesite" => "Strict"
+            "samesite" => $isSecure ? "None" : "Lax"
         ]);
 
         Response::json([
             "status" => true,
             "message" => "Login successful",
             "data" => [
+                "user_id" => $user["user_id"],
                 "username" => $user["username"],
                 "email" => $user["email"],
                 "display_username" => $user["display_username"],
+                "gender" => $user["gender"],
+                "phone_number" => $user["phone_number"],
                 "profile_image" => $user["profile_image"],
                 "cover_image" => $user["cover_image"],
+                "birthday" => $user["birthday"],
+                "location" => $user["location"],
+                "is_active" => $user["is_active"],
+                "last_seen" => $user["last_seen"],
                 "access_token" => $accessToken
             ]
         ]);
@@ -151,7 +198,6 @@ class AuthController
 
                 $generatedUsername = Generator::generateUsername($username);
                 $hash = PasswordService::hash($password);
-
                 $stmt = $conn->prepare("INSERT INTO users (username, display_username, password, email, completed_step) VALUES (?, ?, ?, ?, 1)");
                 $stmt->bind_param("ssss", $generatedUsername, $username, $hash, $email);
                 $stmt->execute();
@@ -162,14 +208,15 @@ class AuthController
                 [$refreshToken, $refreshHash] = TokenService::generateRefreshToken();
 
                 setcookie("refresh_token", $refreshToken, [
-                    "expires" => time() + 60 * 60 * 24 * 30,
-                    "path" => "/auth/refresh",
+                    "expires" => time() + 60 * 60 * 24 * 7,
+                    "path" => "/",
                     "httponly" => true,
                     "samesite" => "Strict"
                 ]);
 
                 Response::json([
                     "status" => true,
+                    "step" => 2,
                     "data" => [
                         "userId" => $userId,
                         "email" => $email,
@@ -295,7 +342,7 @@ class AuthController
 
                 $updateStmt->execute();
 
-                if ($updateStmt->affected_rows === 0) {
+                if ($updateStmt->affected_rows == 0) {
                     Response::json([
                         "status" => false,
                         "message" => "Registration failed - step 2"
@@ -320,7 +367,10 @@ class AuthController
     {
         $conn = Database::connect();
 
-        // Read refresh token from cookie
+        $isSecure =
+            (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
+
         $refreshToken = $_COOKIE["refresh_token"] ?? null;
 
         if (!$refreshToken) {
@@ -328,14 +378,13 @@ class AuthController
                 "status" => false,
                 "message" => "Refresh token missing"
             ], 401);
+            return;
         }
 
-        // Hash received token
         $refreshHash = hash("sha256", $refreshToken);
 
-        // Find matching user
         $stmt = $conn->prepare("
-        SELECT user_id, refresh_token, refresh_token_expire_time
+        SELECT user_id, refresh_token_expire_time
         FROM users
         WHERE refresh_token = ?
         LIMIT 1
@@ -345,47 +394,67 @@ class AuthController
         $result = $stmt->get_result();
 
         if ($result->num_rows === 0) {
+            setcookie("refresh_token", "", [
+                "expires" => time() - 3600,
+                "path" => "/",
+                "secure" => $isSecure,
+                "httponly" => true,
+                "samesite" => $isSecure ? "None" : "Lax"
+            ]);
+
             Response::json([
                 "status" => false,
                 "message" => "Invalid refresh token"
             ], 401);
+            return;
         }
 
         $user = $result->fetch_assoc();
 
-        // Check expiration
         if (strtotime($user["refresh_token_expire_time"]) < time()) {
+
+            $delete = $conn->prepare(
+                "UPDATE users SET refresh_token = NULL WHERE user_id = ?"
+            );
+            $delete->bind_param("i", $user["user_id"]);
+            $delete->execute();
+
+            setcookie("refresh_token", "", [
+                "expires" => time() - 3600,
+                "path" => "/",
+                "secure" => $isSecure,
+                "httponly" => true,
+                "samesite" => $isSecure ? "None" : "Lax"
+            ]);
+
             Response::json([
                 "status" => false,
                 "message" => "Refresh token expired"
             ], 401);
+            return;
         }
 
         // Rotate refresh token
         [$newRefreshToken, $newRefreshHash] = TokenService::generateRefreshToken();
 
-        $newExpire = date("Y-m-d H:i:s", time() + 60 * 60 * 24 * 30);
+        $newExpire = date("Y-m-d H:i:s", time() + 604800);
 
         $update = $conn->prepare("
-        UPDATE users 
+        UPDATE users
         SET refresh_token = ?, refresh_token_expire_time = ?
         WHERE user_id = ?
     ");
         $update->bind_param("ssi", $newRefreshHash, $newExpire, $user["user_id"]);
         $update->execute();
 
-        // Set new refresh token cookie
-        $isSecure = getenv("IS_SECURE") === "true";
-
         setcookie("refresh_token", $newRefreshToken, [
-            "expires" => time() + 60 * 60 * 24 * 30,
-            "path" => "/auth/refresh",
+            "expires" => time() + 604800,
+            "path" => "/",
             "secure" => $isSecure,
             "httponly" => true,
-            "samesite" => "Strict"
+            "samesite" => $isSecure ? "None" : "Lax"
         ]);
 
-        // Issue new access token
         $accessToken = TokenService::generateAccessToken($user["user_id"]);
 
         Response::json([
@@ -396,6 +465,7 @@ class AuthController
             ]
         ]);
     }
+
 
 
     public static function profile()

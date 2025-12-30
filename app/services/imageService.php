@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Service;
 
 use App\Core\Response;
@@ -6,16 +7,13 @@ use CURLFile;
 
 class ImageService
 {
-    // private static string $cloudName = getenv("CLOUDINARY_CLOUD_NAME");
-    // private static string $apiKey = getenv("CLOUDINARY_API_KEY");
-    // private static string $apiSecret = getenv("CLOUDINARY_API_SECRET");
     public static function uploadImage($file, $folder = "profiles")
     {
-        if (!file_exists($file["tmp_name"])) {
+        if (!isset($file["tmp_name"]) || !file_exists($file["tmp_name"])) {
             Response::json([
                 "status" => false,
                 "message" => "Image not found"
-            ]);
+            ], 400);
         }
 
         if ($file["error"] !== UPLOAD_ERR_OK) {
@@ -29,7 +27,7 @@ class ImageService
         if ($file["size"] > $maxSize) {
             Response::json([
                 "status" => false,
-                "message" => "Image size too large (5MB)"
+                "message" => "Image size too large (max 5MB)"
             ], 400);
         }
 
@@ -39,8 +37,8 @@ class ImageService
             "image/webp" => "webp"
         ];
 
-        $finfo = \finfo_open(FILEINFO_MIME_TYPE);
-        $mime = \finfo_file($finfo, $file["tmp_name"]);
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime = finfo_file($finfo, $file["tmp_name"]);
 
         if (!isset($allowedMimes[$mime])) {
             Response::json([
@@ -49,19 +47,72 @@ class ImageService
             ], 400);
         }
 
-        $ext = $allowedMimes[$mime];
-        $filename = bin2hex(random_bytes(16)) . "." . $ext;
+        // Decide environment
+        // $env = getenv("APP_ENV") ?: ($_ENV["APP_ENV"] ?? "local");
+        $host = $_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'];
+        if ($host === "localhost" || $host === "127.0.0.1") {
+            $env = "local";
+        } else {
+            $env = "production";
+        }
 
+        if ($env === "local") {
+            return self::uploadToLocal($file, $folder, $allowedMimes[$mime]);
+        }
+
+        return self::uploadToCloudinary($file, $folder);
+    }
+
+    // ======================================================
+    // LOCAL STORAGE (for localhost)
+    // ======================================================
+    private static function uploadToLocal($file, $folder, $extension)
+    {
+        $basePath = __DIR__ . "/../../public/uploads";
+        $targetDir = $basePath . "/" . $folder;
+
+        if (!is_dir($targetDir)) {
+            mkdir($targetDir, 0777, true);
+        }
+
+        $filename = uniqid("img_", true) . "." . $extension;
+        $targetPath = $targetDir . "/" . $filename;
+
+        if (!move_uploaded_file($file["tmp_name"], $targetPath)) {
+            Response::json([
+                "status" => false,
+                "message" => "Failed to save image locally"
+            ], 500);
+        }
+
+        $publicUrl =
+            (isset($_SERVER['HTTPS']) ? 'https' : 'http') .
+            '://' .
+            $_SERVER['HTTP_HOST'] .
+            dirname($_SERVER['SCRIPT_NAME']);
+
+        return [
+            "secure_url" => $publicUrl . "/uploads/" . $folder . "/" . $filename,
+            "public_id" => $filename,
+            "storage" => "local"
+        ];
+    }
+
+    // ======================================================
+    // CLOUDINARY STORAGE (production)
+    // ======================================================
+    private static function uploadToCloudinary($file, $folder)
+    {
         $timestamp = time();
 
+        $cloudName = getenv("CLOUDINARY_CLOUD_NAME") ?: $_ENV["CLOUDINARY_CLOUD_NAME"];
+        $apiKey = getenv("CLOUDINARY_API_KEY") ?: $_ENV["CLOUDINARY_API_KEY"];
+        $apiSecret = getenv("CLOUDINARY_API_SECRET") ?: $_ENV["CLOUDINARY_API_SECRET"];
+
         $paramToSign = "folder={$folder}&timestamp={$timestamp}";
-        $cloudName = getenv("CLOUDINARY_CLOUD_NAME") == "" ? $_ENV["CLOUDINARY_CLOUD_NAME"] : getenv("CLOUDINARY_CLOUD_NAME");
-        $cloudSecret = getenv("CLOUDINARY_API_SECRET") == "" ? $_ENV["CLOUDINARY_API_SECRET"] : getenv("CLOUDINARY_API_SECRET");
-        $apiKey = getenv("CLOUDINARY_API_KEY") == "" ? $_ENV["CLOUDINARY_API_KEY"] : getenv("CLOUDINARY_API_KEY");
+        $signature = sha1($paramToSign . $apiSecret);
 
-        $signature = sha1($paramToSign . $cloudSecret);
-
-        $url = "https://api.cloudinary.com/v1_1/" . $cloudName . "/image/upload";
+        $url = "https://api.cloudinary.com/v1_1/{$cloudName}/image/upload";
 
         $postFields = [
             "file" => new CURLFile($file["tmp_name"]),
@@ -84,20 +135,18 @@ class ImageService
         if (curl_errno($ch)) {
             Response::json([
                 "status" => false,
-                "message" => "Image upload failed - " . curl_error($ch)
+                "message" => "Cloud upload failed: " . curl_error($ch)
             ], 500);
         }
 
-        echo $response;
+        curl_close($ch);
 
         $result = json_decode($response, true);
-
-        // print_r($result);
 
         if (!isset($result["secure_url"])) {
             Response::json([
                 "status" => false,
-                "message" => "Image upload failed"
+                "message" => "Cloudinary upload failed"
             ], 500);
         }
 

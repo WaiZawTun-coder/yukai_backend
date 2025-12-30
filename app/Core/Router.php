@@ -1,6 +1,7 @@
 <?php
 
-class Router {
+class Router
+{
     private static array $routes = [];
 
     public static function add(
@@ -12,7 +13,8 @@ class Router {
         self::$routes[] = compact("method", "path", "handler", "protected");
     }
 
-    public static function dispatch() {
+    public static function dispatch()
+    {
         header("Content-Type: application/json");
 
         $method = strtoupper($_SERVER["REQUEST_METHOD"]);
@@ -32,12 +34,11 @@ class Router {
             $pattern = "#^{$pattern}$#";
 
             if ($route["method"] === $method && preg_match($pattern, $uri, $matches)) {
+                array_shift($matches);
 
                 if ($route['protected']) {
                     route_guard();
                 }
-
-                array_shift($matches);
                 call_user_func_array($route['handler'], $matches);
                 return;
             }
