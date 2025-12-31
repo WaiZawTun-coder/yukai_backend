@@ -70,8 +70,8 @@ class PostController
                 (COUNT(DISTINCT r.react_id) + COUNT(DISTINCT c.comment_id)) AS total_engagement
             FROM posts p
             JOIN users u ON u.user_id = p.creater_id
-            LEFT JOIN reacts r ON r.post_id = p.post_id
-            LEFT JOIN comments c ON c.post_id = p.post_id
+            LEFT JOIN react r ON r.post_id = p.post_id
+            LEFT JOIN comment c ON c.post_id = p.post_id
             WHERE p.is_deleted = 0 AND p.is_archived = 0
             GROUP BY p.post_id
             ORDER BY total_engagement DESC, p.created_at DESC
@@ -150,8 +150,8 @@ class PostController
                 COUNT(DISTINCT c.comment_id) AS comment_count
             FROM posts p
             JOIN users u ON u.user_id = p.creater_id
-            LEFT JOIN reacts r ON r.post_id = p.post_id
-            LEFT JOIN comments c ON c.post_id = p.post_id
+            LEFT JOIN react r ON r.post_id = p.post_id
+            LEFT JOIN comment c ON c.post_id = p.post_id
             WHERE p.is_deleted = 0 AND p.creater_id = ?
             GROUP BY p.post_id
             ORDER BY p.created_at DESC
@@ -233,8 +233,8 @@ class PostController
             INNER JOIN follows f 
                 ON f.following_id = p.creater_id 
                 AND f.follower_id = ?
-            LEFT JOIN reacts r ON r.post_id = p.post_id
-            LEFT JOIN comments c ON c.post_id = p.post_id
+            LEFT JOIN react r ON r.post_id = p.post_id
+            LEFT JOIN comment c ON c.post_id = p.post_id
             WHERE p.is_deleted = 0
             GROUP BY p.post_id
             ORDER BY p.created_at DESC
@@ -577,6 +577,79 @@ class PostController
             ]);
         }
     }
+
+    /* =====================================================
+     *  Get Comments
+     * ===================================================== */
+    public static function getComments(){
+        $conn = Database::connect();
+        $post_id = (int) (Request::input("post_id") ?? 0);
+
+        if ($post_id === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "post_id is required"
+            ]);
+            return;
+        }
+
+        $page  = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
+        $limit = 5;
+        $offset = ($page - 1) * $limit;
+
+        $sql = "
+            SELECT 
+                c.comment_id,
+                c.comment,
+                c.post_id,
+                c.created_at,
+                u.user_id,
+                u.display_username,
+                u.gender,
+                u.profile_image
+            FROM comment c
+            JOIN users u ON c.user_id = u.user_id
+            WHERE c.post_id = ?
+            AND c.is_deleted = 0
+            ORDER BY c.created_at DESC
+            LIMIT ? OFFSET ?
+        ";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("iii", $post_id, $limit, $offset);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        $comments = [];
+
+        while ($row = $result->fetch_assoc()) {
+              $row["creator"] = [
+                    "id" => $row["user_id"],
+                    "display_username" => $row["display_username"],
+                    "gender" => $row["gender"],
+                    "profile_image" => $row["profile_image"]
+        ];
+
+        unset(
+            $row["user_id"],
+            $row["display_username"],
+            $row["gender"],
+            $row["profile_image"]
+        );
+
+        $row["attachments"] = [];
+
+        $comments[$row["comment_id"]] = $row;
+        }
+        self::attachAttachments($conn, $comments);
+
+        Response::json([
+            "status" => true,
+            "page" => $page,
+            "data" => array_values($comments)
+        ]);
+}
+
 
 
     /* =====================================================
