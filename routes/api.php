@@ -56,3 +56,6 @@ Router::add("POST", "/api/react-post", function () {
 Router::add("POST", "/api/comment-post", function () {
     PostController::commentPost();
 }, false); // insert comment
+Router::add("GET", "/api/get-postAll", function () {
+    PostController::getPost();
+}, false); // retrun all posts

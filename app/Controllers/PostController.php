@@ -193,6 +193,7 @@ class PostController
             "totalPages" => $totalPages,
             "data" => array_values($posts)
         ]);
+
     }
 
     /* =====================================================
