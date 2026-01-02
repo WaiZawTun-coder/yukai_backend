@@ -582,6 +582,7 @@ GROUP BY p.post_id
             ], 500);
         }
     }
+
     /* =====================================================
      *  Insert React
      * ===================================================== */
@@ -642,6 +643,57 @@ GROUP BY p.post_id
             ]);
         }
     }
+    /* =====================================================
+     *  Delete Post
+     * ===================================================== */
+    public static function postDelete(){
+        $conn = Database::connect();
+        $input = Request::json();
+        $post_id = (int) (Request::input("post_id") ?? 0);
+        $creater_id=(int)(Request::input("creater_id") ?? 0);
+
+        //check is_deleted
+        $checkSql = "SELECT is_deleted FROM posts WHERE post_id = ? AND creater_id = ?";
+        $checkStmt = $conn->prepare($checkSql);
+        $checkStmt->bind_param("ii", $post_id, $creater_id);
+        $checkStmt->execute();
+        $result = $checkStmt->get_result();
+
+        if ($result->num_rows === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Post not found"
+            ]);
+            return;
+        }
+
+        $row = $result->fetch_assoc();
+        if ((int)$row['is_deleted'] === 1) {
+            Response::json([
+                "status" => false,
+                "message" => "Post already deleted"
+            ]);
+            return;
+        }
+
+        $deletePost="Update posts set is_deleted=1, updated_at=Now() where post_id=? and creater_id=? and is_deleted=0";
+        $stmtPost=$conn->prepare($deletePost);
+        $stmtPost->bind_param("ii",$post_id,$creater_id);
+        $stmtPost->execute();
+        if($stmtPost->affected_rows==0){
+            Response::json([
+                "status"=>false,
+                "message"=>"Post and User are not found"
+            ]);
+        }
+        else{
+            Response::json([
+                "status"=>true,
+                "message"=>"Deleted Successfully"
+            ]);
+        }
+    }
+
 
     /* =====================================================
      *  Insert Comment
@@ -668,6 +720,130 @@ GROUP BY p.post_id
         ]);
 
     }
+
+    /* =====================================================
+     *  Comment Delete
+     * ===================================================== */
+    public static function commentDelete(){
+        $conn = Database::connect();
+        $input = Request::json();
+        $user_id = (int) (Request::input("user_id") ?? 0);
+        $comment_id=(int)(Request::input("comment_id") ?? 0);
+
+        //check is_deleted
+        $checkSql = "SELECT is_deleted FROM comment WHERE comment_id = ? AND user_id = ?";
+        $checkStmt = $conn->prepare($checkSql);
+        $checkStmt->bind_param("ii", $comment_id, $user_id);
+        $checkStmt->execute();
+        $result = $checkStmt->get_result();
+
+        if ($result->num_rows === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Comment not found"
+            ]);
+            return;
+        }
+
+        $row = $result->fetch_assoc();
+        if ((int)$row['is_deleted'] === 1) {
+            Response::json([
+                "status" => false,
+                "message" => "Comment already deleted"
+            ]);
+            return;
+        }
+
+        $updateComment="Update comment set is_deleted=1, updated_at=Now() where comment_id=? and user_id=? and is_deleted=0";
+        $stmtComment=$conn->prepare($updateComment);
+        $stmtComment->bind_param("ii",$user_id,$comment_id);
+        $stmtComment->execute();
+        if($stmtComment->affected_rows==0){
+            Response::json([
+                "status"=>false,
+                "message"=>"Comment and User are not found"
+            ]);
+        }
+        else{
+            Response::json([
+                "status"=>true,
+                "message"=>"Deleted Successfully"
+            ]);
+        }
+    }
+
+    /* =====================================================
+     *  Get Comments
+     * ===================================================== */
+    public static function getComments(){
+        $conn = Database::connect();
+        $post_id = (int) (Request::input("post_id") ?? 0);
+
+        if ($post_id === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "post_id is required"
+            ]);
+            return;
+        }
+
+        $page  = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
+        $limit = 5;
+        $offset = ($page - 1) * $limit;
+
+        $sql = "
+            SELECT 
+                c.comment_id,
+                c.comment,
+                c.post_id,
+                c.created_at,
+                u.user_id,
+                u.display_username,
+                u.gender,
+                u.profile_image
+            FROM comment c
+            JOIN users u ON c.user_id = u.user_id
+            WHERE c.post_id = ?
+            AND c.is_deleted = 0
+            ORDER BY c.created_at DESC
+            LIMIT ? OFFSET ?
+        ";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("iii", $post_id, $limit, $offset);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        $comments = [];
+
+        while ($row = $result->fetch_assoc()) {
+              $row["creator"] = [
+                    "id" => $row["user_id"],
+                    "display_username" => $row["display_username"],
+                    "gender" => $row["gender"],
+                    "profile_image" => $row["profile_image"]
+        ];
+
+        unset(
+            $row["user_id"],
+            $row["display_username"],
+            $row["gender"],
+            $row["profile_image"]
+        );
+
+        $row["attachments"] = [];
+
+        $comments[$row["comment_id"]] = $row;
+        }
+        self::attachAttachments($conn, $comments);
+
+        Response::json([
+            "status" => true,
+            "page" => $page,
+            "data" => array_values($comments)
+        ]);
+}
+
 
 
     /* =====================================================

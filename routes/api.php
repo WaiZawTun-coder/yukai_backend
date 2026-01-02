@@ -55,8 +55,21 @@ Router::add("POST", "/api/create-post", function () {
 
 Router::add("POST", "/api/react-post", function () {
     PostController::reactPost();
-}, false); // insert react
+}, true); // insert react
 
 Router::add("POST", "/api/comment-post", function () {
     PostController::commentPost();
-}, false); // insert comment
+}, true); // insert comment
+
+Router::add("POST", "/api/delete-comment", function () {
+    PostController::commentDelete();
+}, true); // delete comment
+
+Router::add("GET", "/api/get-comment", function () {
+    PostController::getComments();
+}, true); // get Comments
+
+Router::add("POST", "/api/delete-post", function () {
+    PostController::postDelete();
+}, true); // delete post
+
