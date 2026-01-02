@@ -7,10 +7,10 @@ require_once __DIR__ . '/../../bootstrap.php';
 
 class TokenService
 {
-    public static function generateAccessToken($user_id, $scope = "auth", $expiry = 1800)
+    public static function generateAccessToken($user, $scope = "auth", $expiry = 1800)
     {
         return JWT::encode(
-            ["user_id" => $user_id],
+            $user,
             $_ENV["JWT_SECRET"],
             $expiry
         );

@@ -45,17 +45,38 @@ Router::add("GET", "/api/get-following-post", function () {
     PostController::getFollowingPosts();
 }, true); // get following posts
 
+Router::add("GET", "/api/get-post/{post_id}", function ($post_id) {
+    PostController::getPostsByPostId($post_id);
+}, true);
+
 Router::add("POST", "/api/create-post", function () {
     PostController::createPost();
 }, true); // create post
 
 Router::add("POST", "/api/react-post", function () {
     PostController::reactPost();
-}, false); // insert react
+}, true); // insert react
 
 Router::add("POST", "/api/comment-post", function () {
     PostController::commentPost();
+<<<<<<< HEAD
 }, false); // insert comment
 Router::add("GET", "/api/get-postAll", function () {
     PostController::getPost();
 }, false); // retrun all posts
+=======
+}, true); // insert comment
+
+Router::add("POST", "/api/delete-comment", function () {
+    PostController::commentDelete();
+}, true); // delete comment
+
+Router::add("GET", "/api/get-comment", function () {
+    PostController::getComments();
+}, true); // get Comments
+
+Router::add("POST", "/api/delete-post", function () {
+    PostController::postDelete();
+}, true); // delete post
+
+>>>>>>> b344d77c17d6431edf4541ff7360ed3051e969f9
