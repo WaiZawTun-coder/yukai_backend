@@ -45,6 +45,10 @@ Router::add("GET", "/api/get-following-post", function () {
     PostController::getFollowingPosts();
 }, true); // get following posts
 
+Router::add("GET", "/api/get-post/{post_id}", function ($post_id) {
+    PostController::getPostsByPostId($post_id);
+}, true);
+
 Router::add("POST", "/api/create-post", function () {
     PostController::createPost();
 }, true); // create post
