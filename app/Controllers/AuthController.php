@@ -111,7 +111,7 @@ class AuthController
         }
 
         // Generate tokens
-        $accessToken = TokenService::generateAccessToken($user['user_id']);
+        $accessToken = TokenService::generateAccessToken(["user_id" => $user['user_id'], "username" => $user["username"]]);
         [$refreshToken, $refreshHash] = TokenService::generateRefreshToken();
 
         $expireAt = date("Y-m-d H:i:s", time() + 60 * 60 * 24 * 7);
@@ -204,7 +204,7 @@ class AuthController
 
                 $userId = $conn->insert_id;
 
-                $accessToken = TokenService::generateAccessToken($userId, "registration");
+                $accessToken = TokenService::generateAccessToken(["user_id" => $userId, "username" => $generatedUsername], "registration");
                 [$refreshToken, $refreshHash] = TokenService::generateRefreshToken();
 
                 setcookie("refresh_token", $refreshToken, [
@@ -384,7 +384,7 @@ class AuthController
         $refreshHash = hash("sha256", $refreshToken);
 
         $stmt = $conn->prepare("
-        SELECT user_id, refresh_token_expire_time
+        SELECT user_id, username, refresh_token_expire_time
         FROM users
         WHERE refresh_token = ?
         LIMIT 1
@@ -455,7 +455,7 @@ class AuthController
             "samesite" => $isSecure ? "None" : "Lax"
         ]);
 
-        $accessToken = TokenService::generateAccessToken($user["user_id"]);
+        $accessToken = TokenService::generateAccessToken(["user_id" => $user["user_id"], "username" => $user["username"]]);
 
         Response::json([
             "status" => true,
