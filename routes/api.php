@@ -2,6 +2,7 @@
 use App\Controllers\AuthController;
 use App\Controllers\PostController;
 use App\Controllers\UserController;
+use App\Controllers\SaveController;
 
 // public routes
 Router::add("GET", "/", function () {
@@ -15,7 +16,7 @@ Router::add("POST", "/auth/register", function () {
 }, false);
 Router::add("POST", "/auth/register/{username}", function ($username) {
     AuthController::register($username);
-}, true);
+}, false);
 
 Router::add("POST", "/auth/refresh", function () {
     AuthController::refresh();
@@ -25,51 +26,55 @@ Router::add("POST", "/auth/refresh", function () {
 // users
 Router::add("GET", "/api/get-user", function () {
     UserController::getUser();
-}, true);
+},false);
 
 Router::add("GET", "/api/profile", function () {
     AuthController::index();
-}, true);
+}, false);
 
 
 // posts
 Router::add("GET", "/api/get-post", function () {
     PostController::getPosts();
-}, true); // get all posts
+}, false); // get all posts
 
 Router::add("GET", "/api/get-user-post", function () {
     PostController::getPostsByUserId();
-}, true); // get posts by user
+}, false); // get posts by user
 
 Router::add("GET", "/api/get-following-post", function () {
     PostController::getFollowingPosts();
-}, true); // get following posts
+}, false); // get following posts
 
 Router::add("GET", "/api/get-post/{post_id}", function ($post_id) {
     PostController::getPostsByPostId($post_id);
-}, true);
+}, false);
 
 Router::add("POST", "/api/create-post", function () {
     PostController::createPost();
-}, true); // create post
+}, false); // create post
 
 Router::add("POST", "/api/react-post", function () {
     PostController::reactPost();
-}, true); // insert react
+}, false); // insert react
 
 Router::add("POST", "/api/comment-post", function () {
     PostController::commentPost();
-}, true); // insert comment
+}, false); // insert comment
 
 Router::add("POST", "/api/delete-comment", function () {
     PostController::commentDelete();
-}, true); // delete comment
+}, false); // delete comment
 
 Router::add("GET", "/api/get-comment", function () {
     PostController::getComments();
-}, true); // get Comments
+}, false); // get Comments
 
 Router::add("POST", "/api/delete-post", function () {
     PostController::postDelete();
-}, true); // delete post
+}, false); // delete post
+
+Router::add("GET", "/api/save-post", function () {
+SaveController::savePost();
+}, false); // save post
 
