@@ -15,7 +15,7 @@ class UserController
         $user_id = (int) ($input['user_id'] ?? 0);
 
         $userSql = "
-            SELECT user_id, username, display_username, gender, email,
+            SELECT user_id, username, display_name, gender, email,
                    phone_number, profile_image, cover_image, birthday,
                    location, is_active, last_seen, default_audience
                    FROM users
@@ -37,11 +37,12 @@ class UserController
 
         $user = $result->fetch_assoc();
 
-        Response::json([
-            "status"=>true,
-            "message"=>"Users are as follow",
-            "data"=>$user
-        ]
+        Response::json(
+            [
+                "status" => true,
+                "message" => "Users are as follow",
+                "data" => $user
+            ]
 
         );
     }
