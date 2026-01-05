@@ -1,6 +1,7 @@
 <?php
 use App\Controllers\AuthController;
 use App\Controllers\PostController;
+use App\Controllers\RequestController;
 use App\Controllers\UserController;
 
 // public routes
@@ -59,13 +60,12 @@ Router::add("POST", "/api/react-post", function () {
 
 Router::add("POST", "/api/comment-post", function () {
     PostController::commentPost();
-<<<<<<< HEAD
+
 }, false); // insert comment
 Router::add("GET", "/api/get-postAll", function () {
     PostController::getPost();
 }, false); // retrun all posts
-=======
-}, true); // insert comment
+
 
 Router::add("POST", "/api/delete-comment", function () {
     PostController::commentDelete();
@@ -78,5 +78,10 @@ Router::add("GET", "/api/get-comment", function () {
 Router::add("POST", "/api/delete-post", function () {
     PostController::postDelete();
 }, true); // delete post
+Router::add("POST","/api/send-request", function(){
+    FriendController::sendFriendRequest();
+},protected: false);//send friend requent
 
->>>>>>> b344d77c17d6431edf4541ff7360ed3051e969f9
+
+
+
