@@ -1,7 +1,7 @@
 <?php
 use App\Controllers\AuthController;
 use App\Controllers\PostController;
-use App\Controllers\RequestController;
+use App\Controllers\FriendController;
 use App\Controllers\UserController;
 
 // public routes
