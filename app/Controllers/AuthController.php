@@ -27,7 +27,7 @@ class AuthController
             ], 404);
 
         $userSql = "
-            SELECT user_id, username, display_username, gender, email,
+            SELECT user_id, username, display_name, gender, email,
                    phone_number, profile_image, cover_image, birthday,
                    location, is_active, last_seen, default_audience
             FROM users
@@ -71,7 +71,7 @@ class AuthController
         }
 
         $sql = "SELECT * FROM users 
-                WHERE email = ? OR username = ? OR display_username = ?
+                WHERE email = ? OR username = ? OR display_name = ?
                 LIMIT 1";
 
         $stmt = $conn->prepare($sql);
@@ -144,7 +144,7 @@ class AuthController
                 "user_id" => $user["user_id"],
                 "username" => $user["username"],
                 "email" => $user["email"],
-                "display_username" => $user["display_username"],
+                "display_name" => $user["display_name"],
                 "gender" => $user["gender"],
                 "phone_number" => $user["phone_number"],
                 "profile_image" => $user["profile_image"],
@@ -198,7 +198,7 @@ class AuthController
 
                 $generatedUsername = Generator::generateUsername($username);
                 $hash = PasswordService::hash($password);
-                $stmt = $conn->prepare("INSERT INTO users (username, display_username, password, email, completed_step) VALUES (?, ?, ?, ?, 1)");
+                $stmt = $conn->prepare("INSERT INTO users (username, display_name, password, email, completed_step) VALUES (?, ?, ?, ?, 1)");
                 $stmt->bind_param("ssss", $generatedUsername, $username, $hash, $email);
                 $stmt->execute();
 
