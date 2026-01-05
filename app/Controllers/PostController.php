@@ -10,7 +10,7 @@ use App\Service\ImageService;
 class PostController
 {
     /* =====================================================
-     * Helper: Attach attachments to posts
+     * Helper: Attach post_attachments to posts
      * ===================================================== */
     private static function attachAttachments($conn, &$posts)
     {
@@ -22,8 +22,8 @@ class PostController
         $types = str_repeat("i", count($postIds));
 
         $sql = "
-            SELECT attachment_id, post_id, attachment, attachment_type
-            FROM attachments
+            SELECT post_attachment_id, post_id, file_path, type
+            FROM post_attachments
             WHERE post_id IN ($placeholders)
         ";
 
@@ -51,7 +51,7 @@ class PostController
 
         $sql = "SELECT 
                 p.post_id,
-                p.creater_id,
+                p.creator_user_id,
                 p.shared_post_id,
                 p.privacy,
                 p.content,
@@ -62,27 +62,27 @@ class PostController
                 p.created_at,
                 p.updated_at,
 
-                u.display_username,
+                u.display_name,
                 u.gender,
                 u.profile_image,
 
-                COUNT(DISTINCT r.react_id) AS react_count,
-                COUNT(DISTINCT c.comment_id) AS comment_count,
-                (COUNT(DISTINCT r.react_id) + COUNT(DISTINCT c.comment_id)) AS total_engagement,
+                COUNT(DISTINCT r.post_react_id) AS react_count,
+                COUNT(DISTINCT c.post_comment_id) AS comment_count,
+                (COUNT(DISTINCT r.post_react_id) + COUNT(DISTINCT c.post_comment_id)) AS total_engagement,
 
                 CASE 
-                    WHEN COUNT(ur.react_id) > 0 THEN 1
+                    WHEN COUNT(ur.post_react_id) > 0 THEN 1
                     ELSE 0
                 END AS is_liked,
 
-                MAX(ur.reaction_type) AS reaction_type
+                MAX(ur.reaction) AS reaction
 
             FROM posts p
-            JOIN users u ON u.user_id = p.creater_id
-            LEFT JOIN reacts r ON r.post_id = p.post_id
-            LEFT JOIN comments c ON c.post_id = p.post_id
+            JOIN users u ON u.user_id = p.creator_user_id
+            LEFT JOIN post_reacts r ON r.post_id = p.post_id
+            LEFT JOIN post_comments c ON c.post_id = p.post_id
 
-            LEFT JOIN reacts ur 
+            LEFT JOIN post_reacts ur 
                 ON ur.post_id = p.post_id
             AND ur.user_id = ?
 
@@ -104,14 +104,14 @@ class PostController
         $posts = [];
         while ($row = $result->fetch_assoc()) {
             $row["creator"] = [
-                "id" => $row["creater_id"],
-                "display_username" => $row["display_username"],
+                "id" => $row["creator_user_id"],
+                "display_name" => $row["display_name"],
                 "gender" => $row["gender"],
                 "profile_image" => $row["profile_image"]
             ];
 
             unset(
-                $row["display_username"],
+                $row["display_name"],
                 $row["gender"],
                 $row["profile_image"]
             );
@@ -157,7 +157,7 @@ class PostController
         $sql = "
     SELECT 
         p.post_id,
-        p.creater_id,
+        p.creator_user_id,
         p.shared_post_id,
         p.privacy,
         p.content,
@@ -168,27 +168,27 @@ class PostController
         p.created_at,
         p.updated_at,
 
-        cu.display_username,
+        cu.display_name,
         cu.gender,
         cu.profile_image,
 
-        COUNT(DISTINCT r.react_id) AS react_count,
-        COUNT(DISTINCT c.comment_id) AS comment_count,
+        COUNT(DISTINCT r.post_react_id) AS react_count,
+        COUNT(DISTINCT c.post_comment_id) AS comment_count,
 
         CASE 
-            WHEN COUNT(ur.react_id) > 0 THEN 1
+            WHEN COUNT(ur.post_react_id) > 0 THEN 1
             ELSE 0
         END AS is_liked,
 
-        MAX(ur.reaction_type) AS reaction_type
+        MAX(ur.reaction) AS reaction
 
     FROM posts p
-    JOIN users cu ON cu.user_id = p.creater_id
+    JOIN users cu ON cu.user_id = p.creator_user_id
 
-    LEFT JOIN reacts r ON r.post_id = p.post_id
-    LEFT JOIN comments c ON c.post_id = p.post_id
+    LEFT JOIN post_reacts r ON r.post_id = p.post_id
+    LEFT JOIN post_comments c ON c.post_id = p.post_id
 
-    LEFT JOIN reacts ur 
+    LEFT JOIN post_reacts ur 
         ON ur.post_id = p.post_id
        AND ur.user_id = ?
 
@@ -210,14 +210,14 @@ class PostController
         while ($row = $result->fetch_assoc()) {
 
             $row["creator"] = [
-                "id" => $row["creater_id"],
-                "display_username" => $row["display_username"],
+                "id" => $row["creator_user_id"],
+                "display_name" => $row["display_name"],
                 "gender" => $row["gender"],
                 "profile_image" => $row["profile_image"]
             ];
 
             unset(
-                $row["display_username"],
+                $row["display_name"],
                 $row["gender"],
                 $row["profile_image"]
             );
@@ -266,7 +266,7 @@ class PostController
         $sql = "
     SELECT 
         p.post_id,
-        p.creater_id,
+        p.creator_user_id,
         p.shared_post_id,
         p.privacy,
         p.content,
@@ -277,36 +277,36 @@ class PostController
         p.created_at,
         p.updated_at,
 
-        u.display_username,
+        u.display_name,
         u.gender,
         u.profile_image,
 
-        COUNT(DISTINCT r.react_id) AS react_count,
-        COUNT(DISTINCT c.comment_id) AS comment_count,
+        COUNT(DISTINCT r.post_react_id) AS react_count,
+        COUNT(DISTINCT c.post_comment_id) AS comment_count,
 
         CASE 
-            WHEN COUNT(ur.react_id) > 0 THEN 1
+            WHEN COUNT(ur.post_react_id) > 0 THEN 1
             ELSE 0
         END AS is_liked,
 
-        MAX(ur.reaction_type) AS reaction_type
+        MAX(ur.reaction) AS reaction
 
     FROM posts p
 
     JOIN users u 
-        ON u.user_id = p.creater_id
+        ON u.user_id = p.creator_user_id
 
     INNER JOIN follows f 
-        ON f.following_id = p.creater_id 
-       AND f.follower_id = ?
+        ON f.following_user_id = p.creator_user_id 
+       AND f.follower_user_id = ?
 
-    LEFT JOIN reacts r 
+    LEFT JOIN post_reacts r 
         ON r.post_id = p.post_id
 
-    LEFT JOIN comments c 
+    LEFT JOIN post_comments c 
         ON c.post_id = p.post_id
 
-    LEFT JOIN reacts ur 
+    LEFT JOIN post_reacts ur 
         ON ur.post_id = p.post_id
        AND ur.user_id = ?
 
@@ -327,14 +327,14 @@ class PostController
         while ($row = $result->fetch_assoc()) {
 
             $row["creator"] = [
-                "id" => $row["creater_id"],
-                "display_username" => $row["display_username"],
+                "id" => $row["creator_user_id"],
+                "display_name" => $row["display_name"],
                 "gender" => $row["gender"],
                 "profile_image" => $row["profile_image"]
             ];
 
             unset(
-                $row["display_username"],
+                $row["display_name"],
                 $row["gender"],
                 $row["profile_image"]
             );
@@ -378,7 +378,7 @@ class PostController
         $sql = "
         SELECT 
     p.post_id,
-    p.creater_id,
+    p.creator_user_id,
     p.shared_post_id,
     p.privacy,
     p.content,
@@ -389,31 +389,31 @@ class PostController
     p.created_at,
     p.updated_at,
 
-    u.display_username,
+    u.display_name,
     u.gender,
     u.profile_image,
 
-    COUNT(DISTINCT r.react_id) AS react_count,
-    COUNT(DISTINCT c.comment_id) AS comment_count,
+    COUNT(DISTINCT r.post_react_id) AS react_count,
+    COUNT(DISTINCT c.post_comment_id) AS comment_count,
 
     CASE 
-        WHEN COUNT(ur.react_id) > 0 THEN 1
+        WHEN COUNT(ur.post_react_id) > 0 THEN 1
         ELSE 0
     END AS is_liked,
 
-    MAX(ur.reaction_type) AS reaction_type
+    MAX(ur.reaction) AS reaction
 
 FROM posts p
 JOIN users u 
-    ON u.user_id = p.creater_id
+    ON u.user_id = p.creator_user_id
 
-LEFT JOIN reacts r 
+LEFT JOIN post_reacts r 
     ON r.post_id = p.post_id
 
-LEFT JOIN comments c 
+LEFT JOIN post_comments c 
     ON c.post_id = p.post_id
 
-LEFT JOIN reacts ur 
+LEFT JOIN post_reacts ur 
     ON ur.post_id = p.post_id
    AND ur.user_id = ?
 
@@ -422,7 +422,7 @@ WHERE
     AND p.is_deleted = 0
     AND (
         p.privacy = 'public'
-        OR p.creater_id = ?
+        OR p.creator_user_id = ?
     )
 
 GROUP BY p.post_id
@@ -444,14 +444,14 @@ GROUP BY p.post_id
         }
 
         $post["creator"] = [
-            "id" => $post["creater_id"],
-            "display_username" => $post["display_username"],
+            "id" => $post["creator_user_id"],
+            "display_name" => $post["display_name"],
             "gender" => $post["gender"],
             "profile_image" => $post["profile_image"]
         ];
 
         unset(
-            $post["display_username"],
+            $post["display_name"],
             $post["gender"],
             $post["profile_image"]
         );
@@ -500,7 +500,7 @@ GROUP BY p.post_id
             // =============================
             $sql = "
             INSERT INTO posts 
-            (creater_id, content, privacy, shared_post_id, is_draft, is_archived, is_deleted, is_shared, created_at)
+            (creator_user_id, content, privacy, shared_post_id, is_draft, is_archived, is_deleted, is_shared, created_at)
             VALUES (?, ?, ?, ?, ?, ?, 0, ?, NOW())
         ";
 
@@ -523,7 +523,7 @@ GROUP BY p.post_id
             $post_id = $conn->insert_id;
 
             // =============================
-            // Handle attachments (optional)
+            // Handle post_attachments (optional)
             // =============================
             if (!empty($_FILES['attachments'])) {
                 foreach ($_FILES['attachments']['tmp_name'] as $index => $tmpPath) {
@@ -543,7 +543,7 @@ GROUP BY p.post_id
 
                     // Store in DB
                     $attachSql = "
-                        INSERT INTO attachments (post_id, attachment, attachment_type)
+                        INSERT INTO post_attachments (post_id, file_path, type)
                         VALUES (?, ?, ?)
                     ";
                     $stmtAttach = $conn->prepare($attachSql);
@@ -593,18 +593,18 @@ GROUP BY p.post_id
 
         $user_id = (int) ($input["user_id"] ?? 0);
         $post_id = (int) ($input["post_id"] ?? 0);
-        $reaction_type = trim($input["reaction_type"] ?? 'like');
+        $reaction = trim($input["reaction"] ?? 'like');
 
-        $checkReact = "select reaction_type from reacts where user_id=? and post_id=?";
+        $checkReact = "select reaction from post_reacts where user_id=? and post_id=?";
         $checkStmt = $conn->prepare($checkReact);
         $checkStmt->bind_param("ii", $user_id, $post_id);
         $checkStmt->execute();
         $checkResult = $checkStmt->get_result();
-        if ($checkResult->num_rows > 0) { //check reaction_type is already exist?
+        if ($checkResult->num_rows > 0) { //check reaction is already exist?
             $existing = $checkResult->fetch_assoc();
-            if ($existing['reaction_type'] === $reaction_type) {
+            if ($existing['reaction'] === $reaction) {
                 //delete react
-                $deleteSql = "DELETE FROM reacts WHERE user_id = ? AND post_id = ?";
+                $deleteSql = "DELETE FROM post_reacts WHERE user_id = ? AND post_id = ?";
                 $deleteStmt = $conn->prepare($deleteSql);
                 $deleteStmt->bind_param("ii", $user_id, $post_id);
                 $deleteStmt->execute();
@@ -617,9 +617,9 @@ GROUP BY p.post_id
 
                 // Update
                 $reactUpdate = $conn->prepare(
-                    "UPDATE reacts SET reaction_type=? WHERE post_id=? AND user_id=?"
+                    "UPDATE post_reacts SET reaction=? WHERE post_id=? AND user_id=?"
                 );
-                $reactUpdate->bind_param("sii", $reaction_type, $post_id, $user_id);
+                $reactUpdate->bind_param("sii", $reaction, $post_id, $user_id);
                 $reactUpdate->execute();
 
                 Response::json([
@@ -631,10 +631,10 @@ GROUP BY p.post_id
         }
         //insert react
         else {
-            $sql = "Insert into reacts(post_id,user_id,reaction_type) values (?,?,?)";
+            $sql = "Insert into post_reacts(post_id,user_id,reaction) values (?,?,?)";
 
             $stmtReact = $conn->prepare($sql);
-            $stmtReact->bind_param("iis", $post_id, $user_id, $reaction_type);
+            $stmtReact->bind_param("iis", $post_id, $user_id, $reaction);
             ;
             $stmtReact->execute();
             Response::json([
@@ -646,16 +646,17 @@ GROUP BY p.post_id
     /* =====================================================
      *  Delete Post
      * ===================================================== */
-    public static function postDelete(){
+    public static function postDelete()
+    {
         $conn = Database::connect();
         $input = Request::json();
         $post_id = (int) (Request::input("post_id") ?? 0);
-        $creater_id=(int)(Request::input("creater_id") ?? 0);
+        $creator_id = (int) (Request::input("creator_id") ?? 0);
 
         //check is_deleted
-        $checkSql = "SELECT is_deleted FROM posts WHERE post_id = ? AND creater_id = ?";
+        $checkSql = "SELECT is_deleted FROM posts WHERE post_id = ? AND creator_user_id = ?";
         $checkStmt = $conn->prepare($checkSql);
-        $checkStmt->bind_param("ii", $post_id, $creater_id);
+        $checkStmt->bind_param("ii", $post_id, $creator_id);
         $checkStmt->execute();
         $result = $checkStmt->get_result();
 
@@ -668,7 +669,7 @@ GROUP BY p.post_id
         }
 
         $row = $result->fetch_assoc();
-        if ((int)$row['is_deleted'] === 1) {
+        if ((int) $row['is_deleted'] === 1) {
             Response::json([
                 "status" => false,
                 "message" => "Post already deleted"
@@ -676,20 +677,19 @@ GROUP BY p.post_id
             return;
         }
 
-        $deletePost="Update posts set is_deleted=1, updated_at=Now() where post_id=? and creater_id=? and is_deleted=0";
-        $stmtPost=$conn->prepare($deletePost);
-        $stmtPost->bind_param("ii",$post_id,$creater_id);
+        $deletePost = "Update posts set is_deleted=1, updated_at=Now() where post_id=? and creator_user_id=? and is_deleted=0";
+        $stmtPost = $conn->prepare($deletePost);
+        $stmtPost->bind_param("ii", $post_id, $creator_id);
         $stmtPost->execute();
-        if($stmtPost->affected_rows==0){
+        if ($stmtPost->affected_rows == 0) {
             Response::json([
-                "status"=>false,
-                "message"=>"Post and User are not found"
+                "status" => false,
+                "message" => "Post and User are not found"
             ]);
-        }
-        else{
+        } else {
             Response::json([
-                "status"=>true,
-                "message"=>"Deleted Successfully"
+                "status" => true,
+                "message" => "Deleted Successfully"
             ]);
         }
     }
@@ -707,7 +707,7 @@ GROUP BY p.post_id
         $post_id = (int) (Request::input("post_id") ?? 0);
         $comment = trim(Request::input("comment") ?? null);
 
-        $sql = "Insert into comment(post_id,user_id,comment) values (?,?,?)";
+        $sql = "Insert into comments(post_id,user_id,comment) values (?,?,?)";
 
         $stmtReact = $conn->prepare($sql);
         ;
@@ -724,16 +724,17 @@ GROUP BY p.post_id
     /* =====================================================
      *  Comment Delete
      * ===================================================== */
-    public static function commentDelete(){
+    public static function commentDelete()
+    {
         $conn = Database::connect();
         $input = Request::json();
         $user_id = (int) (Request::input("user_id") ?? 0);
-        $comment_id=(int)(Request::input("comment_id") ?? 0);
+        $post_comment_id = (int) (Request::input("post_comment_id") ?? 0);
 
         //check is_deleted
-        $checkSql = "SELECT is_deleted FROM comment WHERE comment_id = ? AND user_id = ?";
+        $checkSql = "SELECT is_deleted FROM post_comments WHERE post_comment_id = ? AND user_id = ?";
         $checkStmt = $conn->prepare($checkSql);
-        $checkStmt->bind_param("ii", $comment_id, $user_id);
+        $checkStmt->bind_param("ii", $post_comment_id, $user_id);
         $checkStmt->execute();
         $result = $checkStmt->get_result();
 
@@ -746,7 +747,7 @@ GROUP BY p.post_id
         }
 
         $row = $result->fetch_assoc();
-        if ((int)$row['is_deleted'] === 1) {
+        if ((int) $row['is_deleted'] === 1) {
             Response::json([
                 "status" => false,
                 "message" => "Comment already deleted"
@@ -754,20 +755,19 @@ GROUP BY p.post_id
             return;
         }
 
-        $updateComment="Update comment set is_deleted=1, updated_at=Now() where comment_id=? and user_id=? and is_deleted=0";
-        $stmtComment=$conn->prepare($updateComment);
-        $stmtComment->bind_param("ii",$user_id,$comment_id);
+        $updateComment = "Update post_comments set is_deleted=1, updated_at=Now() where post_comment_id=? and user_id=? and is_deleted=0";
+        $stmtComment = $conn->prepare($updateComment);
+        $stmtComment->bind_param("ii", $user_id, $post_comment_id);
         $stmtComment->execute();
-        if($stmtComment->affected_rows==0){
+        if ($stmtComment->affected_rows == 0) {
             Response::json([
-                "status"=>false,
-                "message"=>"Comment and User are not found"
+                "status" => false,
+                "message" => "Comment and User are not found"
             ]);
-        }
-        else{
+        } else {
             Response::json([
-                "status"=>true,
-                "message"=>"Deleted Successfully"
+                "status" => true,
+                "message" => "Deleted Successfully"
             ]);
         }
     }
@@ -775,7 +775,8 @@ GROUP BY p.post_id
     /* =====================================================
      *  Get Comments
      * ===================================================== */
-    public static function getComments(){
+    public static function getComments()
+    {
         $conn = Database::connect();
         $post_id = (int) (Request::input("post_id") ?? 0);
 
@@ -787,21 +788,21 @@ GROUP BY p.post_id
             return;
         }
 
-        $page  = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
+        $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
         $limit = 5;
         $offset = ($page - 1) * $limit;
 
         $sql = "
             SELECT 
-                c.comment_id,
+                c.post_comment_id,
                 c.comment,
                 c.post_id,
                 c.created_at,
                 u.user_id,
-                u.display_username,
+                u.display_name,
                 u.gender,
                 u.profile_image
-            FROM comment c
+            FROM post_comments c
             JOIN users u ON c.user_id = u.user_id
             WHERE c.post_id = ?
             AND c.is_deleted = 0
@@ -817,23 +818,23 @@ GROUP BY p.post_id
         $comments = [];
 
         while ($row = $result->fetch_assoc()) {
-              $row["creator"] = [
-                    "id" => $row["user_id"],
-                    "display_username" => $row["display_username"],
-                    "gender" => $row["gender"],
-                    "profile_image" => $row["profile_image"]
-        ];
+            $row["creator"] = [
+                "id" => $row["user_id"],
+                "display_name" => $row["display_name"],
+                "gender" => $row["gender"],
+                "profile_image" => $row["profile_image"]
+            ];
 
-        unset(
-            $row["user_id"],
-            $row["display_username"],
-            $row["gender"],
-            $row["profile_image"]
-        );
+            unset(
+                $row["user_id"],
+                $row["display_name"],
+                $row["gender"],
+                $row["profile_image"]
+            );
 
-        $row["attachments"] = [];
+            $row["attachments"] = [];
 
-        $comments[$row["comment_id"]] = $row;
+            $comments[$row["post_comment_id"]] = $row;
         }
         self::attachAttachments($conn, $comments);
 
@@ -842,7 +843,7 @@ GROUP BY p.post_id
             "page" => $page,
             "data" => array_values($comments)
         ]);
-}
+    }
 
 
 
@@ -865,7 +866,7 @@ GROUP BY p.post_id
         $stmt = $conn->prepare("
             SELECT COUNT(*) AS total 
             FROM posts 
-            WHERE is_deleted = 0 AND creater_id = ?
+            WHERE is_deleted = 0 AND creator_user_id = ?
         ");
         $stmt->bind_param("i", $userId);
         $stmt->execute();
@@ -880,8 +881,8 @@ GROUP BY p.post_id
 
         $stmt = $conn->prepare("SELECT COUNT(DISTINCT p.post_id) AS total
             FROM posts p
-            INNER JOIN follows f ON f.following_id = p.creater_id 
-                AND f.follower_id = ?
+            INNER JOIN follows f ON f.following_user_id = p.creator_user_id 
+                AND f.follower_user_id = ?
             WHERE p.is_deleted = 0 OR p.is_archived = 0
         ");
 
