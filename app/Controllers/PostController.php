@@ -893,4 +893,17 @@ GROUP BY p.post_id
 
         return (int) $result->fetch_assoc()['total'];
     }
+
+    private static function getPostCountByUsername($username)
+    {
+        $conn = Database::connect();
+
+        $stmt = $conn->prepare("SELECT COUNT(DISTINCT p.post_id) AS total FROM posts p INNER JOIN users u ON u.username = ? WHERE p.is_deleted = 0 OR p.is_archived = 0");
+
+        $stmt->bind_param("s", $username);
+        $stmt->execute();
+
+        $result = $stmt->get_result();
+        return (int) $result->fetch_assoc()["total"];
+    }
 }
