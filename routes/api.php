@@ -94,6 +94,10 @@ Router::add("GET", "/api/get-saved-posts", function () {
 SaveController::getSavedPosts();
 }, true); // get Saved Posts
 
+Router::add("GET", "/api/get-friends-posts", function () {
+PostController::getPostsByFriends();
+}, true); // get friens posts
+
 
 
 
