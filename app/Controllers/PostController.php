@@ -475,7 +475,6 @@ GROUP BY p.post_id
     public static function createPost()
     {
         $conn = Database::connect();
-        $input = Request::json();
 
         $creator_id = (int) (Request::input("creator_id") ?? 0);
         $content = trim(Request::input("content") ?? '');
@@ -565,11 +564,98 @@ GROUP BY p.post_id
             // Commit transaction
             $conn->commit();
 
+            $sql = "
+        SELECT 
+    p.post_id,
+    p.creator_user_id,
+    p.shared_post_id,
+    p.privacy,
+    p.content,
+    p.is_archived,
+    p.is_draft,
+    p.is_deleted,
+    p.is_shared,
+    p.created_at,
+    p.updated_at,
+
+    u.display_name,
+    u.gender,
+    u.profile_image,
+
+    COUNT(DISTINCT r.post_react_id) AS react_count,
+    COUNT(DISTINCT c.post_comment_id) AS comment_count,
+
+    CASE 
+        WHEN COUNT(ur.post_react_id) > 0 THEN 1
+        ELSE 0
+    END AS is_liked,
+
+    MAX(ur.reaction) AS reaction
+
+FROM posts p
+JOIN users u 
+    ON u.user_id = p.creator_user_id
+
+LEFT JOIN post_reacts r 
+    ON r.post_id = p.post_id
+
+LEFT JOIN post_comments c 
+    ON c.post_id = p.post_id
+
+LEFT JOIN post_reacts ur 
+    ON ur.post_id = p.post_id
+   AND ur.user_id = ?
+
+WHERE 
+    p.post_id = ?
+    AND p.is_deleted = 0
+    AND (
+        p.privacy = 'public'
+        OR p.creator_user_id = ?
+    )
+
+GROUP BY p.post_id
+    ";
+
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("iii", $user_id, $post_id, $user_id);
+            $stmt->execute();
+
+            $result = $stmt->get_result();
+            $post = $result->fetch_assoc();
+
+            if (!$post) {
+                Response::json([
+                    "status" => false,
+                    "message" => "Post not found or access denied"
+                ], 404);
+                return;
+            }
+
+            $post["creator"] = [
+                "id" => $post["creator_user_id"],
+                "display_name" => $post["display_name"],
+                "gender" => $post["gender"],
+                "profile_image" => $post["profile_image"]
+            ];
+
+            unset(
+                $post["display_name"],
+                $post["gender"],
+                $post["profile_image"]
+            );
+            $posts = [
+                $post["post_id"] => $post
+            ];
+
+            self::attachAttachments($conn, $posts);
+
             Response::json([
                 "status" => true,
                 "message" => "Post created successfully",
-                "post_id" => $post_id
-            ], 201);
+                "post_id" => $post_id,
+                "data" => array_values($posts)
+            ]);
 
         } catch (\Throwable $e) {
 
@@ -649,9 +735,16 @@ GROUP BY p.post_id
     public static function postDelete()
     {
         $conn = Database::connect();
-        $input = Request::json();
-        $post_id = (int) (Request::input("post_id") ?? 0);
-        $creator_id = (int) (Request::input("creator_id") ?? 0);
+        // $post_id = (int) (Request::input("post_id") ?? 0);
+        $post_id = $_GET["post_id"] ?? 0;
+        $creator_id = Auth::getUser()["user_id"];
+
+        if ($post_id == 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid Post"
+            ], 400);
+        }
 
         //check is_deleted
         $checkSql = "SELECT is_deleted FROM posts WHERE post_id = ? AND creator_user_id = ?";
@@ -684,12 +777,12 @@ GROUP BY p.post_id
         if ($stmtPost->affected_rows == 0) {
             Response::json([
                 "status" => false,
-                "message" => "Post and User are not found"
+                "message" => "Post is not found"
             ]);
         } else {
             Response::json([
                 "status" => true,
-                "message" => "Deleted Successfully"
+                "message" => "Successfully deleted"
             ]);
         }
     }
@@ -702,21 +795,68 @@ GROUP BY p.post_id
     {
         $conn = Database::connect();
         $input = Request::json();
+        $user = Auth::getUser();
+        $user_id = $user["user_id"];
 
-        $user_id = (int) (Request::input("user_id") ?? 0);
-        $post_id = (int) (Request::input("post_id") ?? 0);
-        $comment = trim(Request::input("comment") ?? null);
+        // $post_id = (int) (Request::input("post_id") ?? 0);
+        // $comment = trim(Request::input("comment") ?? null);
+        $post_id = (int) $input["post_id"] ?? 0;
+        $comment = trim($input["comment"] ?? null);
 
-        $sql = "Insert into comments(post_id,user_id,comment) values (?,?,?)";
+        if ($post_id == 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Cannot find post"
+            ], 500);
+        }
+
+        $sql = "Insert into post_comments(post_id,user_id,comment) values (?,?,?)";
 
         $stmtReact = $conn->prepare($sql);
-        ;
-        $stmtReact->bind_param("iis", $user_id, $post_id, $comment);
-        ;
+
+        $stmtReact->bind_param("iis", $post_id, $user_id, $comment);
+
         $stmtReact->execute();
+        $comment_id = $conn->insert_id;
+
+        $sql = "SELECT 
+                c.post_comment_id,
+                c.comment,
+                c.post_id,
+                c.created_at,
+                u.user_id,
+                u.display_name,
+                u.gender,
+                u.profile_image
+            FROM post_comments c
+            JOIN users u ON c.user_id = u.user_id
+            WHERE c.post_id = ? AND c.post_comment_id = ?
+            AND c.is_deleted = 0";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("ii", $post_id, $comment_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        $comment = $result->fetch_assoc();
+        $comment["creator"] = [
+            "id" => $comment["user_id"],
+            "display_name" => $comment["display_name"],
+            "gender" => $comment["gender"],
+            "profile_image" => $comment["profile_image"]
+        ];
+
+        unset(
+            $comment["user_id"],
+            $comment["display_name"],
+            $comment["gender"],
+            $comment["profile_image"]
+        );
+
         Response::json([
             "status" => true,
-            "message" => "Added Successfully"
+            "message" => "Added Successfully",
+            "comment" => $comment
         ]);
 
     }
@@ -727,7 +867,6 @@ GROUP BY p.post_id
     public static function commentDelete()
     {
         $conn = Database::connect();
-        $input = Request::json();
         $user_id = (int) (Request::input("user_id") ?? 0);
         $post_comment_id = (int) (Request::input("post_comment_id") ?? 0);
 
@@ -775,10 +914,10 @@ GROUP BY p.post_id
     /* =====================================================
      *  Get Comments
      * ===================================================== */
-    public static function getComments()
+    public static function getComments($post_id)
     {
         $conn = Database::connect();
-        $post_id = (int) (Request::input("post_id") ?? 0);
+        // $post_id = (int) (Request::input("post_id") ?? 0);
 
         if ($post_id === 0) {
             Response::json([
@@ -788,8 +927,9 @@ GROUP BY p.post_id
             return;
         }
 
-        $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
-        $limit = 5;
+        $page = $_GET["page"] ?? 1;
+
+        $limit = 10;
         $offset = ($page - 1) * $limit;
 
         $sql = "
@@ -832,16 +972,17 @@ GROUP BY p.post_id
                 $row["profile_image"]
             );
 
-            $row["attachments"] = [];
-
             $comments[$row["post_comment_id"]] = $row;
         }
-        self::attachAttachments($conn, $comments);
+
+        $comment_count = self::getCommentCount($post_id);
+        $total_page = ceil($comment_count / $limit);
 
         Response::json([
             "status" => true,
             "page" => $page,
-            "data" => array_values($comments)
+            "total_page" => $total_page,
+            "data" => array_values($comments),
         ]);
     }
 
@@ -906,4 +1047,22 @@ GROUP BY p.post_id
         $result = $stmt->get_result();
         return (int) $result->fetch_assoc()["total"];
     }
+
+    private static function getCommentCount($post_id)
+    {
+        $conn = Database::connect();
+
+        $sql = "SELECT COUNT(*) AS total_comments
+                    FROM post_comments
+                    WHERE post_id = ?
+                    AND is_deleted = 0;";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $post_id);
+        $stmt->execute();
+
+        $result = $stmt->get_result();
+        return (int) $result->fetch_assoc()["total_comments"];
+    }
+
 }
