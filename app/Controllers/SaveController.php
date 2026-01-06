@@ -1,13 +1,16 @@
 <?php
 namespace App\Controllers;
 
+use App\Core\Auth;
 use App\Core\Database;
 use App\Core\Response;
 use App\Core\Request;
 use App\Service\ImageService;
 
 class SaveController
+
 {
+    
     public static function savePost()
     {
         $conn = Database::connect();
@@ -74,7 +77,196 @@ class SaveController
 
         Response::json([
             "status" => true,
-            "message" => "Post saved successfully"
+            "message" => "Post saved successfully "
         ]);
     }
+    
+
+    //create saved lists
+    public static function createSavedLists(){
+        $conn=Database::connect();
+        $user_id=(int)(Request::input("user_id") ?? 0);
+        $name = trim(Request::input("name") ?? "");
+        $sql = "INSERT INTO saved_lists (user_id, name)
+                    VALUES (?, ?)";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("is", $user_id, $name);
+            $stmt->execute();
+            $saved_list_id = $conn->insert_id;
+            Response::json([
+                "status"=>true,
+                "message"=>"Save List is created",
+                "data"=>$saved_list_id
+            ]);
+
+    }
+
+    //create saved posts
+    public static function createSavedPosts(){
+        $conn = Database::connect();
+
+        $post_id = (int)(Request::input("post_id") ?? 0);
+        $saved_list_id = (int)(Request::input("saved_list_id") ?? 0);
+
+        //post_id is always required
+        if ($post_id === 0 & $saved_list_id==0) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid post or Invalid saved list."
+            ]);
+            return;
+        }
+
+        //check duplicate post
+        $checkSql = "SELECT 1 FROM saved_posts
+                     WHERE saved_list_id = ? AND post_id = ?";
+        $checkStmt = $conn->prepare($checkSql);
+        $checkStmt->bind_param("ii", $saved_list_id, $post_id);
+        $checkStmt->execute();
+        $checkStmt->store_result();
+
+        if ($checkStmt->num_rows > 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Post already saved to this saved list."
+            ]);
+            return;
+        }
+        $checkStmt->close();
+
+        $sql = "INSERT INTO saved_posts (saved_list_id, post_id, created_at)
+                VALUES (?, ?, NOW())";
+        $stmtSave = $conn->prepare($sql);
+        $stmtSave->bind_param("ii", $saved_list_id, $post_id);
+        $stmtSave->execute();
+        $stmtSave->close();
+
+        Response::json([
+            "status" => true,
+            "message" => "Post saved successfully"
+        ]);
+
+    }
+    
+    //get Saved Lists
+    public static function getSavedLists(){
+        $conn = Database::connect();
+        $user = Auth::getUser();
+        $user_id = $user["user_id"];
+        
+        $sql="Select * from saved_lists where user_id=?";
+        $stmtSave=$conn->prepare($sql);
+        $stmtSave->bind_param("i", $user_id);
+        $stmtSave->execute();
+        $result=$stmtSave->get_result();
+        if ($result->num_rows === 0) {
+            Response::json([
+                "status" => true,
+                "message" => "No saved list for " . $user['username']
+            ]);
+        }
+
+        $savedLists = $result->fetch_assoc();
+
+        Response::json(
+            [
+                "status" => true,
+                "message" => "Saved lists are as follow",
+                "data" => $savedLists
+            ]
+
+        );
+    }
+
+    //get Save Posts
+    public static function getSavedPosts(){
+        $conn = Database::connect();
+        $saved_list_id=(int)(Request::input("saved_list_id")?? 0);
+        $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
+        $user_id=(int)(Request::input("user_id")?? 0);
+        $limit = 5;
+        $offset = ($page - 1) * $limit;
+        $sql = "SELECT 
+                p.post_id,
+                p.creator_user_id,
+                p.shared_post_id,
+                p.privacy,
+                p.content,
+                p.is_archived,
+                p.is_draft,
+                p.is_deleted,
+                p.is_shared,
+                p.created_at,
+                p.updated_at,
+                u.display_name,
+                u.gender,
+                u.profile_image,
+
+                COUNT(DISTINCT r.post_react_id) AS react_count,
+                COUNT(DISTINCT c.post_comment_id) AS comment_count,
+                (COUNT(DISTINCT r.post_react_id) + COUNT(DISTINCT c.post_comment_id)) AS total_engagement,
+
+                CASE 
+                    WHEN COUNT(ur.post_react_id) > 0 THEN 1
+                    ELSE 0
+                END AS is_liked,
+
+                MAX(ur.reaction) AS reaction
+
+            FROM posts p
+            JOIN users u ON u.user_id = p.creator_user_id
+            LEFT JOIN post_reacts r ON r.post_id = p.post_id
+            LEFT JOIN post_comments c ON c.post_id = p.post_id
+            LEFT JOIN saved_posts sp ON sp.post_id=p.post_id
+
+            LEFT JOIN post_reacts ur 
+             ON ur.post_id = p.post_id 
+             
+
+            WHERE p.is_deleted = 0
+            And sp.saved_list_id=? AND sp.user_id=?
+
+            GROUP BY p.post_id
+            ORDER BY total_engagement DESC, p.created_at DESC
+            LIMIT ? OFFSET ?
+
+        ";
+        $stmtSave=$conn->prepare($sql);
+        $stmtSave->bind_param("iiii",$saved_list_id,$user_id,$limit,$offset);
+        $stmtSave->execute();
+        $result=$stmtSave->get_result();
+        $posts = [];
+        while ($row = $result->fetch_assoc()) {
+            $row["creator"] = [
+                "id" => $row["creator_user_id"],
+                "display_name" => $row["display_name"],
+                "gender" => $row["gender"],
+                "profile_image" => $row["profile_image"]
+            ];
+
+            unset(
+                $row["display_name"],
+                $row["gender"],
+                $row["profile_image"]
+            );
+
+            $row['attachments'] = [];
+            $posts[$row['post_id']] = $row;
+        }
+
+        PostController::attachAttachments($conn, $posts);
+
+        $totalPosts = PostController::getPostCount();
+        $totalPages = ceil($totalPosts / $limit);
+
+        Response::json([
+            "status" => true,
+            "page" => $page,
+            "totalPages" => $totalPages,
+            "data" => array_values($posts)
+        ]);
+
+
+    }
+    
 }

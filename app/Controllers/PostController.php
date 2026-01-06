@@ -12,7 +12,7 @@ class PostController
     /* =====================================================
      * Helper: Attach post_attachments to posts
      * ===================================================== */
-    private static function attachAttachments($conn, &$posts)
+    public static function attachAttachments($conn, &$posts)
     {
         if (empty($posts))
             return;
@@ -850,7 +850,7 @@ GROUP BY p.post_id
     /* =====================================================
      * Count helpers
      * ===================================================== */
-    private static function getPostCount($userId = 0)
+    public static function getPostCount($userId = 0)
     {
         $conn = Database::connect();
 

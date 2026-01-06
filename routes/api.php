@@ -10,10 +10,10 @@ Router::add("GET", "/", function () {
 }, true);
 Router::add("POST", "/auth/login", function () {
     AuthController::login();
-}, true);
+}, false);
 Router::add("POST", "/auth/register", function () {
     AuthController::register();
-}, true);
+}, false);
 Router::add("POST", "/auth/register/{username}", function ($username) {
     AuthController::register($username);
 }, true);
@@ -74,7 +74,26 @@ Router::add("POST", "/api/delete-post", function () {
     PostController::postDelete();
 }, true); // delete post
 
-Router::add("GET", "/api/save-post", function () {
-SaveController::savePost();
-}, true); // save post
+// Router::add("POST", "/api/save-post", function () {
+// SaveController::savePost();
+// }, true); // save post
+
+Router::add("POST", "/api/create-saved-list", function () {
+SaveController::createSavedLists();
+}, true); // create saved lists
+
+Router::add("POST", "/api/save-post", function () {
+SaveController::createSavedPosts();
+}, true); // create saved posts
+
+Router::add("GET", "/api/get-saved-lists", function () {
+SaveController::getSavedLists();
+}, true); // get Saved Lists
+
+Router::add("GET", "/api/get-saved-posts", function () {
+SaveController::getSavedPosts();
+}, true); // get Saved Posts
+
+
+
 
