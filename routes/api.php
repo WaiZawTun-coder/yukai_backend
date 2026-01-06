@@ -80,7 +80,10 @@ Router::add("POST", "/api/delete-post", function () {
 }, true); // delete post
 Router::add("POST","/api/send-request", function(){
     FriendController::sendFriendRequest();
-},protected: false);//send friend requent
+}, true);//send friend requent
+Router::add("POST","/api/response-request", function(){
+    FriendController::acceptFriendRequest();
+},true);//accept,reject,cancel friend request
 
 
 
