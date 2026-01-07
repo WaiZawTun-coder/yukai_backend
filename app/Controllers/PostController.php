@@ -77,21 +77,21 @@ class PostController
 
                 MAX(ur.reaction) AS reaction
 
-            FROM posts p
-            JOIN users u ON u.user_id = p.creator_user_id
-            LEFT JOIN post_reacts r ON r.post_id = p.post_id
-            LEFT JOIN post_comments c ON c.post_id = p.post_id
+                FROM posts p
+                JOIN users u ON u.user_id = p.creator_user_id
+                LEFT JOIN post_reacts r ON r.post_id = p.post_id
+                LEFT JOIN post_comments c ON c.post_id = p.post_id
 
-            LEFT JOIN post_reacts ur 
-                ON ur.post_id = p.post_id
-            AND ur.user_id = ?
+                LEFT JOIN post_reacts ur 
+                    ON ur.post_id = p.post_id
+                AND ur.user_id = ?
 
-            WHERE p.is_deleted = 0
-            AND p.is_archived = 0
+                WHERE p.is_deleted = 0
+                AND p.is_archived = 0
 
-            GROUP BY p.post_id
-            ORDER BY total_engagement DESC, p.created_at DESC
-            LIMIT ? OFFSET ?
+                GROUP BY p.post_id
+                ORDER BY total_engagement DESC, p.created_at DESC
+                LIMIT ? OFFSET ?
 
         ";
 
@@ -155,49 +155,49 @@ class PostController
         $user_id = $user?->user_id ?? 0;
 
         $sql = "
-    SELECT 
-        p.post_id,
-        p.creator_user_id,
-        p.shared_post_id,
-        p.privacy,
-        p.content,
-        p.is_archived,
-        p.is_draft,
-        p.is_deleted,
-        p.is_shared,
-        p.created_at,
-        p.updated_at,
+                SELECT 
+                p.post_id,
+                p.creator_user_id,
+                p.shared_post_id,
+                p.privacy,
+                p.content,
+                p.is_archived,
+                p.is_draft,
+                p.is_deleted,
+                p.is_shared,
+                p.created_at,
+                p.updated_at,
 
-        cu.display_name,
-        cu.gender,
-        cu.profile_image,
+                cu.display_name,
+                cu.gender,
+                cu.profile_image,
 
-        COUNT(DISTINCT r.post_react_id) AS react_count,
-        COUNT(DISTINCT c.post_comment_id) AS comment_count,
+                COUNT(DISTINCT r.post_react_id) AS react_count,
+                COUNT(DISTINCT c.post_comment_id) AS comment_count,
 
-        CASE 
-            WHEN COUNT(ur.post_react_id) > 0 THEN 1
-            ELSE 0
-        END AS is_liked,
+                CASE 
+                    WHEN COUNT(ur.post_react_id) > 0 THEN 1
+                    ELSE 0
+                END AS is_liked,
 
-        MAX(ur.reaction) AS reaction
+                MAX(ur.reaction) AS reaction
 
-    FROM posts p
-    JOIN users cu ON cu.user_id = p.creator_user_id
+                FROM posts p
+                JOIN users cu ON cu.user_id = p.creator_user_id
 
-    LEFT JOIN post_reacts r ON r.post_id = p.post_id
-    LEFT JOIN post_comments c ON c.post_id = p.post_id
+                LEFT JOIN post_reacts r ON r.post_id = p.post_id
+                LEFT JOIN post_comments c ON c.post_id = p.post_id
 
-    LEFT JOIN post_reacts ur 
-        ON ur.post_id = p.post_id
-       AND ur.user_id = ?
+                LEFT JOIN post_reacts ur 
+                    ON ur.post_id = p.post_id
+                AND ur.user_id = ?
 
-    WHERE p.is_deleted = 0
-      AND cu.username = ?
+                WHERE p.is_deleted = 0
+                AND cu.username = ?
 
-    GROUP BY p.post_id
-    ORDER BY p.created_at DESC
-    LIMIT ? OFFSET ?
+                GROUP BY p.post_id
+                ORDER BY p.created_at DESC
+                LIMIT ? OFFSET ?
     ";
 
         $stmt = $conn->prepare($sql);
@@ -264,57 +264,57 @@ class PostController
         $offset = ($page - 1) * $limit;
 
         $sql = "
-    SELECT 
-        p.post_id,
-        p.creator_user_id,
-        p.shared_post_id,
-        p.privacy,
-        p.content,
-        p.is_archived,
-        p.is_draft,
-        p.is_deleted,
-        p.is_shared,
-        p.created_at,
-        p.updated_at,
+                SELECT 
+                p.post_id,
+                p.creator_user_id,
+                p.shared_post_id,
+                p.privacy,
+                p.content,
+                p.is_archived,
+                p.is_draft,
+                p.is_deleted,
+                p.is_shared,
+                p.created_at,
+                p.updated_at,
 
-        u.display_name,
-        u.gender,
-        u.profile_image,
+                u.display_name,
+                u.gender,
+                u.profile_image,
 
-        COUNT(DISTINCT r.post_react_id) AS react_count,
-        COUNT(DISTINCT c.post_comment_id) AS comment_count,
+                COUNT(DISTINCT r.post_react_id) AS react_count,
+                COUNT(DISTINCT c.post_comment_id) AS comment_count,
 
-        CASE 
-            WHEN COUNT(ur.post_react_id) > 0 THEN 1
-            ELSE 0
-        END AS is_liked,
+                CASE 
+                    WHEN COUNT(ur.post_react_id) > 0 THEN 1
+                    ELSE 0
+                END AS is_liked,
 
-        MAX(ur.reaction) AS reaction
+                MAX(ur.reaction) AS reaction
 
-    FROM posts p
+                FROM posts p
 
-    JOIN users u 
-        ON u.user_id = p.creator_user_id
+                JOIN users u 
+                    ON u.user_id = p.creator_user_id
 
-    INNER JOIN follows f 
-        ON f.following_user_id = p.creator_user_id 
-       AND f.follower_user_id = ?
+                INNER JOIN follows f 
+                    ON f.following_user_id = p.creator_user_id 
+                AND f.follower_user_id = ?
 
-    LEFT JOIN post_reacts r 
-        ON r.post_id = p.post_id
+                LEFT JOIN post_reacts r 
+                    ON r.post_id = p.post_id
 
-    LEFT JOIN post_comments c 
-        ON c.post_id = p.post_id
+                LEFT JOIN post_comments c 
+                    ON c.post_id = p.post_id
 
-    LEFT JOIN post_reacts ur 
-        ON ur.post_id = p.post_id
-       AND ur.user_id = ?
+                LEFT JOIN post_reacts ur 
+                    ON ur.post_id = p.post_id
+                AND ur.user_id = ?
 
-    WHERE p.is_deleted = 0
+                WHERE p.is_deleted = 0
 
-    GROUP BY p.post_id
-    ORDER BY p.created_at DESC
-    LIMIT ? OFFSET ?
+                GROUP BY p.post_id
+                ORDER BY p.created_at DESC
+                LIMIT ? OFFSET ?
     ";
 
         $stmt = $conn->prepare($sql);
@@ -376,57 +376,57 @@ class PostController
         }
 
         $sql = "
-        SELECT 
-    p.post_id,
-    p.creator_user_id,
-    p.shared_post_id,
-    p.privacy,
-    p.content,
-    p.is_archived,
-    p.is_draft,
-    p.is_deleted,
-    p.is_shared,
-    p.created_at,
-    p.updated_at,
+                SELECT 
+                p.post_id,
+                p.creator_user_id,
+                p.shared_post_id,
+                p.privacy,
+                p.content,
+                p.is_archived,
+                p.is_draft,
+                p.is_deleted,
+                p.is_shared,
+                p.created_at,
+                p.updated_at,
 
-    u.display_name,
-    u.gender,
-    u.profile_image,
+                u.display_name,
+                u.gender,
+                u.profile_image,
 
-    COUNT(DISTINCT r.post_react_id) AS react_count,
-    COUNT(DISTINCT c.post_comment_id) AS comment_count,
+                COUNT(DISTINCT r.post_react_id) AS react_count,
+                COUNT(DISTINCT c.post_comment_id) AS comment_count,
 
-    CASE 
-        WHEN COUNT(ur.post_react_id) > 0 THEN 1
-        ELSE 0
-    END AS is_liked,
+                CASE 
+                    WHEN COUNT(ur.post_react_id) > 0 THEN 1
+                    ELSE 0
+                END AS is_liked,
 
-    MAX(ur.reaction) AS reaction
+                MAX(ur.reaction) AS reaction
 
-FROM posts p
-JOIN users u 
-    ON u.user_id = p.creator_user_id
+                FROM posts p
+                JOIN users u 
+                    ON u.user_id = p.creator_user_id
 
-LEFT JOIN post_reacts r 
-    ON r.post_id = p.post_id
+                LEFT JOIN post_reacts r 
+                    ON r.post_id = p.post_id
 
-LEFT JOIN post_comments c 
-    ON c.post_id = p.post_id
+                LEFT JOIN post_comments c 
+                    ON c.post_id = p.post_id
 
-LEFT JOIN post_reacts ur 
-    ON ur.post_id = p.post_id
-   AND ur.user_id = ?
+                LEFT JOIN post_reacts ur 
+                    ON ur.post_id = p.post_id
+                AND ur.user_id = ?
 
-WHERE 
-    p.post_id = ?
-    AND p.is_deleted = 0
-    AND (
-        p.privacy = 'public'
-        OR p.creator_user_id = ?
-    )
+                WHERE 
+                    p.post_id = ?
+                    AND p.is_deleted = 0
+                    AND (
+                        p.privacy = 'public'
+                        OR p.creator_user_id = ?
+                    )
 
-GROUP BY p.post_id
-    ";
+                GROUP BY p.post_id
+        ";
 
         $stmt = $conn->prepare($sql);
         $stmt->bind_param("iii", $user_id, $post_id, $user_id);
@@ -498,9 +498,9 @@ GROUP BY p.post_id
             // Insert post
             // =============================
             $sql = "
-            INSERT INTO posts 
-            (creator_user_id, content, privacy, shared_post_id, is_draft, is_archived, is_deleted, is_shared, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, 0, ?, NOW())
+                    INSERT INTO posts 
+                    (creator_user_id, content, privacy, shared_post_id, is_draft, is_archived, is_deleted, is_shared, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, 0, ?, NOW())
         ";
 
             $is_shared = $shared_post_id ? 1 : 0;

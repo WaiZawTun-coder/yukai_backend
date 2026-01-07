@@ -98,6 +98,14 @@ Router::add("GET", "/api/get-friends-posts", function () {
 PostController::getPostsByFriends();
 }, true); // get friens posts
 
+Router::add("GET", "/api/update-saved-posts", function () {
+SaveController::updateSavedPosts();
+}, true); // update saved posts
+
+Router::add("GET", "/api/delete-saved-posts", function () {
+SaveController::deleteSavedPosts();
+}, true); // delete saved posts
+
 
 
 
