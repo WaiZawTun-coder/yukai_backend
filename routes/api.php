@@ -62,15 +62,15 @@ Router::add("POST", "/api/comment-post", function () {
     PostController::commentPost();
 }, true); // insert comment
 
-Router::add("POST", "/api/delete-comment", function () {
+Router::add("DELETE", "/api/delete-comment", function () {
     PostController::commentDelete();
 }, true); // delete comment
 
-Router::add("GET", "/api/get-comment", function () {
-    PostController::getComments();
+Router::add("GET", "/api/get-comment/{post_id}", function ($post_id) {
+    PostController::getComments($post_id);
 }, true); // get Comments
 
-Router::add("POST", "/api/delete-post", function () {
+Router::add("DELETE", "/api/delete-post", function () {
     PostController::postDelete();
 }, true); // delete post
 
