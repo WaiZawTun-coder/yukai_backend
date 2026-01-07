@@ -3,6 +3,7 @@ use App\Controllers\AuthController;
 use App\Controllers\PostController;
 use App\Controllers\UserController;
 use App\Controllers\SaveController;
+use App\Core\Auth;
 
 // public routes
 Router::add("GET", "/", function () {
@@ -105,6 +106,14 @@ SaveController::updateSavedPosts();
 Router::add("GET", "/api/delete-saved-posts", function () {
 SaveController::deleteSavedPosts();
 }, true); // delete saved posts
+
+Router::add("POST", "/auth/generateOTP", function () {
+AuthController::generateOTP();
+}, true); // generate otp 
+
+Router::add("POST", "/auth/verifyOTP", function () {
+AuthController::verifyOTP();
+}, true); // verify otp
 
 
 

@@ -465,8 +465,101 @@ class AuthController
             ]
         ]);
     }
+    // generate OTP 
+    public static function generateOTP()
+    {
+        $conn = Database::connect();
+        $user_id=(int)(Request::input("user_id")?? 0);
+
+        $otpcode = '';
+        for ($i = 0; $i < 8; $i++) {
+            $otpcode .= random_int(0, 9);
+        }
+        $expiryMinutes=5;
+
+        $hashedOtp = password_hash($otpcode, PASSWORD_DEFAULT);
+
+        // Clean up existing OTPs for this user
+        $cleanupStmt = $conn->prepare("
+            DELETE FROM otp 
+            WHERE user_id = ?
+        ");
+        $cleanupStmt->bind_param("i", $user_id);
+        $cleanupStmt->execute();
+
+        // Insert new OTP record (NOT USED YET)
+        $stmt = $conn->prepare("
+            INSERT INTO otp (user_id, otp_code, expiration_time)
+            VALUES (?, ?, NOW() + INTERVAL 5 MINUTE);
+        ");
+        $stmt->bind_param("is", $user_id, $hashedOtp);
+
+        if (!$stmt->execute()) {
+            return false;
+        }
+
+        Response::json([
+            "status" => true,
+            "message" => "Added Successfully",
+            "data" => [
+                // "otp code"=>$otpcode,
+                "otp_id" => $conn->insert_id,
+                "expires_in_minutes" => $expiryMinutes
+            ]
+        ]);
+    }
 
 
+    // Verify OTP
+    public static function verifyOTP()
+    {
+        $conn = Database::connect();
+        $user_id=(int)(Request::input("user_id")?? 0);
+        $otpcode=trim(Request::input("otp_code")?? "");
+
+        // Get valid OTPs for this user
+        $stmt = $conn->prepare("
+            SELECT otp_id, otp_code, expiration_time
+            FROM otp
+            WHERE user_id = ? 
+            AND expiration_time > NOW()
+            AND is_used = FALSE
+            ORDER BY created_at DESC
+            LIMIT 1
+        ");
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        if ($result->num_rows === 0) {
+            Response::json([
+                'status' => false,
+                'message' => 'No valid OTP found or OTP has expired'
+            ], 400);
+        }
+
+        $otpRecord = $result->fetch_assoc();
+        if (!password_verify($otpcode, $otpRecord['otp_code'])) {
+            Response::json([
+                'status' => false,
+                'message' => 'Invalid OTP code'
+            ], 401);
+        }
+
+        // Mark OTP as used
+        $updateStmt = $conn->prepare("
+            UPDATE otp 
+            SET is_used = TRUE
+            WHERE otp_id = ?
+        ");
+        $updateStmt->bind_param("i", $otpRecord['otp_id']);
+        $updateStmt->execute();
+
+        Response::json([
+            'status' => true,
+            'message' => 'OTP verified successfully'
+        ]);
+    }
 
     public static function profile()
     {
