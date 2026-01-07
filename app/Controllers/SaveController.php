@@ -80,6 +80,70 @@ class SaveController
             "message" => "Post saved successfully "
         ]);
     }
+
+    //upade saved posts
+    public static function updateSavedPosts(){
+        $conn=Database::connect();
+        $saved_post_id=(int)(Request::input("saved_post_id")?? 0);
+        $saved_list_id=(int)(Request::input("saved_list_id")?? 0);
+        //check saved_post_id
+        if ($saved_post_id === 0 || $saved_list_id === 0) {
+        Response::json([
+            "status" => false,
+            "message" => "Invalid input"
+        ]);
+        return;
+        }
+        //check saved posts existence
+        $sql="select saved_post_id from saved_posts where saved_post_id=? ";
+        $checkStmt=$conn->prepare($sql);
+        $checkStmt->bind_param("i",$saved_post_id);
+        $checkStmt->execute();
+        $checkStmt->store_result();
+        if($checkStmt->num_rows===0){
+            Response::json([
+                "status"=>false,
+                "message"=>"Saved Posts are not found"
+
+            ]);
+
+        }
+        else{
+            $savedUpdate=$conn->prepare("Update saved_posts Set saved_list_id=? where saved_post_id=?");
+            $savedUpdate->bind_param("ii",$saved_list_id,$saved_post_id);
+            $savedUpdate->execute();
+            Response::json([
+                "status"=>true,
+                "message"=>"Update Successfully"
+
+            ]);
+
+        }
+
+    }
+    //delete saved posts
+    public static function deleteSavedPosts(){
+        $conn=Database::connect();
+        $saved_post_id=(int)(Request::input("saved_post_id")?? 0);
+        //check the saved post_id has?
+        if($saved_post_id===0){
+            Response::json([
+                "status"=>false,
+                "message"=>"Saved Post is not found"
+            ]);;
+            return;
+        }
+        else{
+            $sql="Delete From saved_posts where saved_post_id=?";
+            $stmt=$conn->prepare($sql);
+            $stmt->bind_param("i",$saved_post_id);
+            $stmt->execute();
+            Response::json([
+                "status"=>true,
+                "message"=>"This saved posts is delected successfully"
+            ]);
+        }
+    }
     
 
     //create saved lists
