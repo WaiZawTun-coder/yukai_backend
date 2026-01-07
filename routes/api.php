@@ -82,9 +82,14 @@ Router::add("POST","/api/send-request", function(){
     FriendController::sendFriendRequest();
 }, true);//send friend requent
 Router::add("POST","/api/response-request", function(){
-    FriendController::acceptFriendRequest();
+    FriendController::responseFriendRequest();
 },true);//accept,reject,cancel friend request
-
+Router::add("GET","/api/get-sent-requests",function(){
+    FriendController::getFriendRequest();
+},true);//get Friend Request
+Router::add("GET","/api/get-received-requests",function(){
+    FriendController::getReceivedRequests();
+},true);
 
 
 

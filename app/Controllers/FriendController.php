@@ -44,7 +44,7 @@ class FriendController{
         ]);           
     }
 
-    public static function acceptFriendRequest(){
+    public static function responseFriendRequest(){
             $conn=Database::connect();
             $input=Request::json();
             $sender_id=(int)($input['user_1_id']?? 0);
@@ -75,6 +75,73 @@ class FriendController{
                 "message"=>$message
             ]);
 
+    }
+    public static function getFriendRequest(){
+        $conn=Database::connect();
+        $input=Request::json();
+        $sender_id=(int)($input['user_1_id']?? 0);
+        $friendRequentList=
+        "SELECT f.user_2_id as requsted_user_id,
+                u.display_name,
+                u.profile_image,
+                u.cover_image,
+                f.created_at
+                FROM friends f
+                JOIN users u ON f.user_2_id = u.user_id
+                WHERE f.user_1_id =? 
+                AND f.status='pending'
+                ORDER BY f.created_at DESC";
+        $getRequest=$conn->prepare($friendRequentList);
+        $getRequest->bind_param("i",$sender_id);
+        $getRequest->execute();
+        $getResultList=$getRequest->get_result();
+        $posts=[];
+        while($row["creator"]= $getResultList->fetch_assoc()){
+            // $row["creator"]=[
+            //     "id"=>$row["user_id"],
+            //     "display_name"=>$row["display_name"],
+            //     "profile_image"=>$row["profile_image"]
+            // ];
+            $posts[]=$row;
+        }
+       
+        Response::json([
+            "status"=>true,
+            "message"=>"Get Friend Request List",
+            "data"=>array_values($posts)
+        ]);
+
+    }
+    public static function getReceivedRequests(){
+        $conn=Database::connect();
+        $input=Request::json();
+        $receiver_id=(int)($input['user_2_id']?? 0);
+        $friendRequentList=
+        "SELECT f.user_1_id as sender_id,
+                u.display_name,
+                u.profile_image,
+                u.cover_image,
+                f.created_at
+                FROM friends f
+                JOIN users u ON f.user_1_id = u.user_id
+                WHERE f.user_2_id =? 
+                AND f.status='pending'
+                ORDER BY f.created_at DESC";
+        $getRequest=$conn->prepare($friendRequentList);
+        $getRequest->bind_param("i",$receiver_id);
+        $getRequest->execute();
+        $getResultList=$getRequest->get_result();
+        $posts=[];
+        while($row["receiver"]= $getResultList->fetch_assoc()){
+           
+            $posts[]=$row;
+        }
+       
+        Response::json([
+            "status"=>true,
+            "message"=>"Get Friend Request List",
+            "data"=>array_values($posts)
+        ]);
     }
 
  }
