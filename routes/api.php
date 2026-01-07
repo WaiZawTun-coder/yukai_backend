@@ -26,7 +26,7 @@ Router::add("POST", "/auth/refresh", function () {
 // users
 Router::add("GET", "/api/get-user", function () {
     UserController::getUser();
-},true);
+}, true);
 
 Router::add("GET", "/api/profile", function () {
     AuthController::index();
@@ -45,6 +45,10 @@ Router::add("GET", "/api/get-user-post", function () {
 Router::add("GET", "/api/get-following-post", function () {
     PostController::getFollowingPosts();
 }, true); // get following posts
+
+Router::add("GET", "/api/get-friends-posts", function () {
+    PostController::getPostsByFriends();
+}, true); // get friens posts
 
 Router::add("GET", "/api/get-post/{post_id}", function ($post_id) {
     PostController::getPostsByPostId($post_id);
@@ -79,31 +83,27 @@ Router::add("DELETE", "/api/delete-post", function () {
 // }, true); // save post
 
 Router::add("POST", "/api/create-saved-list", function () {
-SaveController::createSavedLists();
+    SaveController::createSavedLists();
 }, true); // create saved lists
 
 Router::add("POST", "/api/save-post", function () {
-SaveController::createSavedPosts();
+    SaveController::createSavedPosts();
 }, true); // create saved posts
 
 Router::add("GET", "/api/get-saved-lists", function () {
-SaveController::getSavedLists();
+    SaveController::getSavedLists();
 }, true); // get Saved Lists
 
 Router::add("GET", "/api/get-saved-posts", function () {
-SaveController::getSavedPosts();
+    SaveController::getSavedPosts();
 }, true); // get Saved Posts
 
-Router::add("GET", "/api/get-friends-posts", function () {
-PostController::getPostsByFriends();
-}, true); // get friens posts
-
 Router::add("GET", "/api/update-saved-posts", function () {
-SaveController::updateSavedPosts();
+    SaveController::updateSavedPosts();
 }, true); // update saved posts
 
 Router::add("GET", "/api/delete-saved-posts", function () {
-SaveController::deleteSavedPosts();
+    SaveController::deleteSavedPosts();
 }, true); // delete saved posts
 
 
