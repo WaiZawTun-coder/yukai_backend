@@ -2,11 +2,12 @@
 use App\Controllers\AuthController;
 use App\Controllers\PostController;
 use App\Controllers\UserController;
+use App\Controllers\SaveController;
 
 // public routes
 Router::add("GET", "/", function () {
     echo json_encode(["status" => true, "message" => "success"]);
-}, false);
+}, true);
 Router::add("POST", "/auth/login", function () {
     AuthController::login();
 }, false);
@@ -19,13 +20,13 @@ Router::add("POST", "/auth/register/{username}", function ($username) {
 
 Router::add("POST", "/auth/refresh", function () {
     AuthController::refresh();
-}, false);
+}, true);
 
 
 // users
 Router::add("GET", "/api/get-user", function () {
     UserController::getUser();
-}, true);
+},true);
 
 Router::add("GET", "/api/profile", function () {
     AuthController::index();
@@ -72,4 +73,31 @@ Router::add("GET", "/api/get-comment/{post_id}", function ($post_id) {
 Router::add("DELETE", "/api/delete-post", function () {
     PostController::postDelete();
 }, true); // delete post
+
+// Router::add("POST", "/api/save-post", function () {
+// SaveController::savePost();
+// }, true); // save post
+
+Router::add("POST", "/api/create-saved-list", function () {
+SaveController::createSavedLists();
+}, true); // create saved lists
+
+Router::add("POST", "/api/save-post", function () {
+SaveController::createSavedPosts();
+}, true); // create saved posts
+
+Router::add("GET", "/api/get-saved-lists", function () {
+SaveController::getSavedLists();
+}, true); // get Saved Lists
+
+Router::add("GET", "/api/get-saved-posts", function () {
+SaveController::getSavedPosts();
+}, true); // get Saved Posts
+
+Router::add("GET", "/api/get-friends-posts", function () {
+PostController::getPostsByFriends();
+}, true); // get friens posts
+
+
+
 

@@ -12,7 +12,7 @@ class PostController
     /* =====================================================
      * Helper: Attach post_attachments to posts
      * ===================================================== */
-    private static function attachAttachments($conn, &$posts)
+    public static function attachAttachments($conn, &$posts)
     {
         if (empty($posts))
             return;
@@ -985,13 +985,100 @@ GROUP BY p.post_id
             "data" => array_values($comments),
         ]);
     }
+    public static function getPostsByFriends(){
+        $conn=Database::connect();
+        // $user = Auth::getUser();
+        // $user_id = $user["user_id"] ?? 0;
+        $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
+        $user_id=(int)(Request::input("user_id")?? 0);
+        $limit = 5;
+        $offset = ($page - 1) * $limit;
+        $sql = "SELECT 
+                p.post_id,
+                p.creator_user_id,
+                p.shared_post_id,
+                p.privacy,
+                p.content,
+                p.is_archived,
+                p.is_draft,
+                p.is_deleted,
+                p.is_shared,
+                p.created_at,
+                p.updated_at,
+                u.display_name,
+                u.gender,
+                u.profile_image,
+
+                COUNT(DISTINCT r.post_react_id) AS react_count,
+                COUNT(DISTINCT c.post_comment_id) AS comment_count,
+                (COUNT(DISTINCT r.post_react_id) + COUNT(DISTINCT c.post_comment_id)) AS total_engagement,
+
+                CASE 
+                    WHEN COUNT(ur.post_react_id) > 0 THEN 1
+                    ELSE 0
+                END AS is_liked,
+
+                MAX(ur.reaction) AS reaction
+
+                FROM posts p
+                JOIN users u ON u.user_id = p.creator_user_id
+                JOIN friends f
+                ON (f.user_1_id = ? AND f.user_2_id = p.creator_user_id)
+                OR (f.user_2_id = ? AND f.user_1_id = p.creator_user_id)
+                LEFT JOIN post_reacts r ON r.post_id = p.post_id
+                LEFT JOIN post_comments c ON c.post_id = p.post_id
+                LEFT JOIN post_reacts ur 
+                ON ur.post_id = p.post_id 
+                WHERE p.is_deleted = 0
+                
+                GROUP BY p.post_id
+                ORDER BY total_engagement DESC, p.created_at DESC
+                LIMIT ? OFFSET ?
+
+        ";
+        $stmtSave=$conn->prepare($sql);
+        $stmtSave->bind_param("iiii",$user_id,$user_id,$limit,$offset);
+        $stmtSave->execute();
+        $result=$stmtSave->get_result();
+        $posts = [];
+        while ($row = $result->fetch_assoc()) {
+            $row["creator"] = [
+                "id" => $row["creator_user_id"],
+                "display_name" => $row["display_name"],
+                "gender" => $row["gender"],
+                "profile_image" => $row["profile_image"]
+            ];
+
+            unset(
+                $row["display_name"],
+                $row["gender"],
+                $row["profile_image"]
+            );
+
+            $row['attachments'] = [];
+            $posts[$row['post_id']] = $row;
+        }
+
+        PostController::attachAttachments($conn, $posts);
+
+        $totalPosts = PostController::getPostCount();
+        $totalPages = ceil($totalPosts / $limit);
+
+        Response::json([
+            "status" => true,
+            "page" => $page,
+            "totalPages" => $totalPages,
+            "data" => array_values($posts)
+        ]);
+
+    }
 
 
 
     /* =====================================================
      * Count helpers
      * ===================================================== */
-    private static function getPostCount($userId = 0)
+    public static function getPostCount($userId = 0)
     {
         $conn = Database::connect();
 
