@@ -20,7 +20,7 @@ Router::add("POST", "/auth/register/{username}", function ($username) {
 
 Router::add("POST", "/auth/refresh", function () {
     AuthController::refresh();
-}, true);
+}, false);
 
 
 // users
@@ -34,7 +34,7 @@ Router::add("GET", "/api/profile", function () {
 
 
 // posts
-Router::add("GET", "/api/get-post", function () {
+Router::add("GET", "/api/get-posts", function () {
     PostController::getPosts();
 }, true); // get all posts
 
@@ -50,8 +50,8 @@ Router::add("GET", "/api/get-friends-posts", function () {
     PostController::getPostsByFriends();
 }, true); // get friens posts
 
-Router::add("GET", "/api/get-post/{post_id}", function ($post_id) {
-    PostController::getPostsByPostId($post_id);
+Router::add("GET", "/api/get-post", function () {
+    PostController::getPostsByPostId();
 }, true);
 
 Router::add("POST", "/api/create-post", function () {
