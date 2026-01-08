@@ -11,6 +11,12 @@ use App\Service\TokenService;
 use App\Service\PasswordService;
 use App\Service\ImageService;
 use DateTime;
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
+
+require_once __DIR__ . '/../../phpmailer/Exception.php';
+require_once __DIR__ . '/../../phpmailer/PHPMailer.php';
+require_once __DIR__ . '/../../phpmailer/SMTP.php';
 
 class AuthController
 {
@@ -466,10 +472,10 @@ class AuthController
         ]);
     }
     // generate OTP 
-    public static function generateOTP()
+    public static function generateOTP($user_id)
     {
         $conn = Database::connect();
-        $user_id=(int)(Request::input("user_id")?? 0);
+       
 
         $otpcode = '';
         for ($i = 0; $i < 8; $i++) {
@@ -498,24 +504,25 @@ class AuthController
             return false;
         }
 
-        Response::json([
-            "status" => true,
-            "message" => "Added Successfully",
-            "data" => [
-                // "otp code"=>$otpcode,
-                "otp_id" => $conn->insert_id,
-                "expires_in_minutes" => $expiryMinutes
-            ]
-        ]);
+        // Response::json([
+        //     "status" => true,
+        //     "message" => "Added Successfully",
+        //     "data" => [
+        //         // "otp code"=>$otpcode,
+        //         "otp_id" => $conn->insert_id,
+        //         "expires_in_minutes" => $expiryMinutes,
+        //         "otp-code"=>$otpcode
+        //     ]
+        // ]);
+        return $otpcode;
     }
 
 
     // Verify OTP
-    public static function verifyOTP()
+    public static function verifyOTP($user_id,$otpcode)
     {
         $conn = Database::connect();
-        $user_id=(int)(Request::input("user_id")?? 0);
-        $otpcode=trim(Request::input("otp_code")?? "");
+       
 
         // Get valid OTPs for this user
         $stmt = $conn->prepare("
@@ -555,11 +562,142 @@ class AuthController
         $updateStmt->bind_param("i", $otpRecord['otp_id']);
         $updateStmt->execute();
 
+        // Response::json([
+        //     'status' => true,
+        //     'message' => 'OTP verified successfully'
+        // ]);
+        return true;
+        
+    }
+
+    public static function sendEmail($email,$otpcode) {
+        
+       
+        $subject = "Password Rest OTP";
+        $body = "Hello,
+
+        Dear Trader,
+        \n\nYour OTP code is: $otpcode\n\nThis code expires in 5 minutes.\n\n
+        We are updating account records to ensure uninterrupted access.
+        Please review your account information at your earliest convenience.
+
+        Best regards,
+        May Thingyan Support Team";
+
+        if ($email === "") {
+            Response::json([
+                "status" => false,
+                "message" => "Email address is required"
+            ], 400);
+        }
+
+        $mail = new PHPMailer(true);
+
+        try {
+            $mail->isSMTP();
+            $mail->Host       = 'smtp.gmail.com';
+            $mail->SMTPAuth   = true;
+            $mail->Username   = $_ENV['GMAIL_USERNAME'];
+            $mail->Password   = $_ENV['GMAIL_APP_PASSWORD'];
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+            $mail->Port       = 587;
+
+            $mail->CharSet = 'UTF-8';
+
+            $mail->setFrom($_ENV['GMAIL_USERNAME'], 'May Thingyan');
+            $mail->addAddress($email);
+
+            $mail->isHTML(false);
+            $mail->Subject = $subject;
+            $mail->Body    = $body;
+
+            $mail->send();
+            return true;
+            // Response::json([
+            //     "status" => true,
+            //     "message" => "Email sent successfully"
+            // ]);
+
+        } catch (Exception $e) {
+            Response::json([
+                "status" => false,
+                "message" => "Mailer error",
+                "error" => $mail->ErrorInfo
+            ], 500);
+        }
+        
+    }
+
+    //forget password function
+
+    public static function forgetPassword(){
+    $conn = Database::connect();
+    $email = trim(Request::input("email") ?? "");
+
+    if ($email === "") {
         Response::json([
-            'status' => true,
-            'message' => 'OTP verified successfully'
+            "status" => false, 
+            "message" => "Email is required"], 400);
+    }
+
+    $stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ?");
+    $stmt->bind_param("s", $email);
+    $stmt->execute();
+    $user = $stmt->get_result()->fetch_assoc();
+
+    if (!$user) {
+        Response::json([
+            "status" => false,
+            "message" => "User not found"], 404);
+    }
+
+    $otpcode = self::generateOTP($user['user_id']);
+
+    if (!$otpcode) {
+        Response::json([
+            "status" => false, 
+            "message" => "Failed to generate OTP"], 500);
+    }
+
+    self::sendEmail($email, $otpcode);
+
+    Response::json([
+        "status" => true,
+        "message" => "OTP sent to your email"
+    ]);
+    }
+
+    //reset password
+    public static function resetPassword(){
+        $conn = Database::connect();
+
+        $user_id = (int)(Request::input("user_id") ?? 0);
+        $otpcode = trim(Request::input("otp_code") ?? "");
+        $newPassword = Request::input("new_password") ?? "";
+
+        if (!$user_id || $otpcode === "" || $newPassword === "") {
+            Response::json([
+                "status" => false, 
+                "message" => "All fields are required"], 400);
+        }
+
+        if (!self::verifyOTP($user_id, $otpcode)) {
+            Response::json([
+                "status" => false, 
+                "message" => "Invalid or expired OTP"], 401);
+        }
+
+        $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
+        $stmt = $conn->prepare("UPDATE users SET password = ? WHERE user_id = ?");
+        $stmt->bind_param("si", $hashedPassword, $user_id);
+        $stmt->execute();
+
+        Response::json([
+            "status" => true,
+            "message" => "Password reset successfully"
         ]);
     }
+
 
     public static function profile()
     {
