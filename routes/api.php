@@ -1,6 +1,7 @@
 <?php
 use App\Controllers\AuthController;
 use App\Controllers\PostController;
+use App\Controllers\FriendController;
 use App\Controllers\UserController;
 use App\Controllers\SaveController;
 use App\Core\Auth;
@@ -73,7 +74,12 @@ Router::add("POST", "/api/react-post", function () {
 
 Router::add("POST", "/api/comment-post", function () {
     PostController::commentPost();
-}, true); // insert comment
+
+}, false); // insert comment
+Router::add("GET", "/api/get-postAll", function () {
+    PostController::getPost();
+}, false); // retrun all posts
+
 
 Router::add("DELETE", "/api/delete-comment", function () {
     PostController::commentDelete();
@@ -86,6 +92,23 @@ Router::add("GET", "/api/get-comment/{post_id}", function ($post_id) {
 Router::add("DELETE", "/api/delete-post", function () {
     PostController::postDelete();
 }, true); // delete post
+Router::add("POST","/api/send-request", function(){
+    FriendController::sendFriendRequest();
+}, true);//send friend requent
+Router::add("POST","/api/response-request", function(){
+    FriendController::responseFriendRequest();
+},true);//accept,reject,cancel friend request
+Router::add("GET","/api/get-sent-requests",function(){
+    FriendController::getFriendRequest();
+},true);//get Friend Request
+Router::add("GET","/api/get-received-requests",function(){
+    FriendController::getReceivedRequests();
+},true);
+Router::add("GET","/api/get-people-you-may-know", function(){
+    FriendController::peopleYouMayKnow();
+},protected:false);
+
+
 
 // Router::add("POST", "/api/save-post", function () {
 // SaveController::savePost();
