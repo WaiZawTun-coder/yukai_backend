@@ -90,6 +90,9 @@ Router::add("GET","/api/get-sent-requests",function(){
 Router::add("GET","/api/get-received-requests",function(){
     FriendController::getReceivedRequests();
 },true);
+Router::add("GET","/api/get-people-you-may-know", function(){
+    FriendController::peopleYouMayKnow();
+},protected:false);
 
 
 

@@ -143,5 +143,59 @@ class FriendController{
             "data"=>array_values($posts)
         ]);
     }
+    public static function peopleYouMayKnow(){
+        $conn=Database::connect();
+        $input=Request::json();
+        $user_id=(int)($input['user_id']?? 0);
+        $getMyfriend="SELECT 
+            u.user_id,
+            u.display_name
+            from users u 
+            JOIN friends f
+            ON (u.user_id=f.user_1_id or u.user_id=f.user_2_id)
+            WHERE (f.user_1_id=? or f.user_2_id=?)
+            AND u.user_id!=?";
+        $getMyFriendList=$conn->prepare($getMyfriend);
+        $getMyFriendList->bind_param("iii",$user_id,$user_id,$user_id);
+        $getMyFriendList->execute();
+        $getResult=$getMyFriendList->get_result();
+        $myfriend=[];
+        while($row=$getResult->fetch_assoc()){
+            $myfriend[]=$row["user_id"];
+        }
+        // Response::json([
+        //     "status"=>true,
+        //     "data"=>$myfriend
+        // ]);
+        $friendList = implode(',', $myfriend);
+        $getFriendOfFriendSql="SELECT 
+               DISTINCT friend_id,
+               u.display_name,
+               u.profile_image,
+               u.cover_image
+               from friends f
+               LEFT JOIN users u
+               ON (u.user_id=f.user_1_id or u.user_id=f.user_2_id)
+               WHERE (f.user_1_id IN ($friendList) OR f.user_2_id IN ($friendList))
+               AND f.user_1_id!=? AND f.user_2_id!=?
+               AND u.user_id not in ($friendList)
+             
+               ORDER BY u.display_name
+               ";
+        $getmutualFriend=$conn->prepare($getFriendOfFriendSql);
+        $getmutualFriend->bind_param("ii",$user_id,$user_id);
+        $getmutualFriend->execute();
+        $getResultList=$getmutualFriend->get_result();
+        $mutualFriend=[];
+        while($row=$getResultList->fetch_assoc()){
+            $mutualFriend[]=$row;
+        }
+        Response::json([
+            "status"=>true,
+            "data"=>$mutualFriend
+        ]);
+
+
+    }
 
  }
