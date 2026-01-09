@@ -38,8 +38,8 @@ Router::add("GET", "/api/get-posts", function () {
     PostController::getPosts();
 }, true); // get all posts
 
-Router::add("GET", "/api/get-user-post", function () {
-    PostController::getPostsByUserId();
+Router::add("GET", "/api/get-user-post/{username}", function ($username) {
+    PostController::getPostsByUsername($username);
 }, true); // get posts by user
 
 Router::add("GET", "/api/get-following-post", function () {
@@ -94,8 +94,8 @@ Router::add("GET", "/api/get-saved-lists", function () {
     SaveController::getSavedLists();
 }, true); // get Saved Lists
 
-Router::add("GET", "/api/get-saved-posts", function () {
-    SaveController::getSavedPosts();
+Router::add("GET", "/api/get-saved-posts/{list_id}", function ($list_id) {
+    SaveController::getSavedPosts($list_id);
 }, true); // get Saved Posts
 
 Router::add("GET", "/api/update-saved-posts", function () {
