@@ -8,16 +8,15 @@ use App\Core\Request;
 use App\Service\ImageService;
 
 class SaveController
-
 {
-    
+
     public static function savePost()
     {
         $conn = Database::connect();
 
-        $post_id = (int)(Request::input("post_id") ?? 0);
-        $saved_list_id = (int)(Request::input("saved_list_id") ?? 0);
-        $user_id = (int)(Request::input("user_id") ?? 0);
+        $post_id = (int) (Request::input("post_id") ?? 0);
+        $saved_list_id = (int) (Request::input("saved_list_id") ?? 0);
+        $user_id = (int) (Request::input("user_id") ?? 0);
         $name = trim(Request::input("name") ?? "");
 
         // post_id is always required
@@ -82,39 +81,41 @@ class SaveController
     }
 
     //upade saved posts
-    public static function updateSavedPosts(){
-        $conn=Database::connect();
-        $saved_post_id=(int)(Request::input("saved_post_id")?? 0);
-        $saved_list_id=(int)(Request::input("saved_list_id")?? 0);
+    public static function updateSavedPosts()
+    {
+        $conn = Database::connect();
+        // $saved_post_id = (int) (Request::input("saved_post_id") ?? 0);
+        // $saved_list_id = (int) (Request::input("saved_list_id") ?? 0);
+        $saved_post_id = (int) $_GET["post_id"] ?? 0;
+        $saved_list_id = (int) $_GET["list_id"] ?? 0;
         //check saved_post_id
         if ($saved_post_id === 0 || $saved_list_id === 0) {
-        Response::json([
-            "status" => false,
-            "message" => "Invalid input"
-        ]);
-        return;
+            Response::json([
+                "status" => false,
+                "message" => "Invalid input"
+            ]);
+            return;
         }
         //check saved posts existence
-        $sql="select saved_post_id from saved_posts where saved_post_id=? ";
-        $checkStmt=$conn->prepare($sql);
-        $checkStmt->bind_param("i",$saved_post_id);
+        $sql = "select saved_post_id from saved_posts where saved_post_id=?";
+        $checkStmt = $conn->prepare($sql);
+        $checkStmt->bind_param("i", $saved_post_id);
         $checkStmt->execute();
         $checkStmt->store_result();
-        if($checkStmt->num_rows===0){
+        if ($checkStmt->num_rows === 0) {
             Response::json([
-                "status"=>false,
-                "message"=>"Saved Posts are not found"
+                "status" => false,
+                "message" => "Saved Posts are not found"
 
             ]);
 
-        }
-        else{
-            $savedUpdate=$conn->prepare("Update saved_posts Set saved_list_id=? where saved_post_id=?");
-            $savedUpdate->bind_param("ii",$saved_list_id,$saved_post_id);
+        } else {
+            $savedUpdate = $conn->prepare("Update saved_posts Set saved_list_id=? where saved_post_id=?");
+            $savedUpdate->bind_param("ii", $saved_list_id, $saved_post_id);
             $savedUpdate->execute();
             Response::json([
-                "status"=>true,
-                "message"=>"Update Successfully"
+                "status" => true,
+                "message" => "Update Successfully"
 
             ]);
 
@@ -122,58 +123,61 @@ class SaveController
 
     }
     //delete saved posts
-    public static function deleteSavedPosts(){
-        $conn=Database::connect();
-        $saved_post_id=(int)(Request::input("saved_post_id")?? 0);
+    public static function deleteSavedPosts()
+    {
+        $conn = Database::connect();
+        $saved_post_id = (int) (Request::input("saved_post_id") ?? 0);
         //check the saved post_id has?
-        if($saved_post_id===0){
+        if ($saved_post_id === 0) {
             Response::json([
-                "status"=>false,
-                "message"=>"Saved Post is not found"
-            ]);;
+                "status" => false,
+                "message" => "Saved Post is not found"
+            ]);
+            ;
             return;
-        }
-        else{
-            $sql="Delete From saved_posts where saved_post_id=?";
-            $stmt=$conn->prepare($sql);
-            $stmt->bind_param("i",$saved_post_id);
+        } else {
+            $sql = "Delete From saved_posts where saved_post_id=?";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("i", $saved_post_id);
             $stmt->execute();
             Response::json([
-                "status"=>true,
-                "message"=>"This saved posts is delected successfully"
+                "status" => true,
+                "message" => "This saved posts is delected successfully"
             ]);
         }
     }
-    
+
 
     //create saved lists
-    public static function createSavedLists(){
-        $conn=Database::connect();
-        $user_id=(int)(Request::input("user_id") ?? 0);
+    public static function createSavedLists()
+    {
+        $conn = Database::connect();
+        $user_id = (int) (Request::input("user_id") ?? 0);
         $name = trim(Request::input("name") ?? "");
         $sql = "INSERT INTO saved_lists (user_id, name)
                     VALUES (?, ?)";
-            $stmt = $conn->prepare($sql);
-            $stmt->bind_param("is", $user_id, $name);
-            $stmt->execute();
-            $saved_list_id = $conn->insert_id;
-            Response::json([
-                "status"=>true,
-                "message"=>"Save List is created",
-                "data"=>$saved_list_id
-            ]);
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("is", $user_id, $name);
+        $stmt->execute();
+        $saved_list_id = $conn->insert_id;
+        Response::json([
+            "status" => true,
+            "message" => "Save List is created",
+            "data" => $saved_list_id
+        ]);
 
     }
 
     //create saved posts
-    public static function createSavedPosts(){
+    public static function createSavedPosts()
+    {
         $conn = Database::connect();
 
-        $post_id = (int)(Request::input("post_id") ?? 0);
-        $saved_list_id = (int)(Request::input("saved_list_id") ?? 0);
+        $post_id = (int) (Request::input("post_id") ?? 0);
+        $saved_list_id = (int) (Request::input("saved_list_id") ?? 0);
 
         //post_id is always required
-        if ($post_id === 0 & $saved_list_id==0) {
+        if ($post_id === 0 & $saved_list_id == 0) {
             Response::json([
                 "status" => false,
                 "message" => "Invalid post or Invalid saved list."
@@ -211,18 +215,19 @@ class SaveController
         ]);
 
     }
-    
+
     //get Saved Lists
-    public static function getSavedLists(){
+    public static function getSavedLists()
+    {
         $conn = Database::connect();
         $user = Auth::getUser();
         $user_id = $user["user_id"];
-        
-        $sql="Select * from saved_lists where user_id=?";
-        $stmtSave=$conn->prepare($sql);
+
+        $sql = "Select * from saved_lists where user_id=?";
+        $stmtSave = $conn->prepare($sql);
         $stmtSave->bind_param("i", $user_id);
         $stmtSave->execute();
-        $result=$stmtSave->get_result();
+        $result = $stmtSave->get_result();
         if ($result->num_rows === 0) {
             Response::json([
                 "status" => true,
@@ -246,11 +251,15 @@ class SaveController
     }
 
     //get Save Posts
-    public static function getSavedPosts(){
+    public static function getSavedPosts()
+    {
         $conn = Database::connect();
-        $saved_list_id=(int)(Request::input("saved_list_id")?? 0);
+        $saved_list_id = (int) (Request::input("saved_list_id") ?? 0);
         $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
-        $user_id=(int)(Request::input("user_id")?? 0);
+
+        $user = Auth::getUser();
+        $user_id = $user["user_id"];
+
         $limit = 5;
         $offset = ($page - 1) * $limit;
         $sql = "SELECT 
@@ -298,10 +307,10 @@ class SaveController
             LIMIT ? OFFSET ?
 
         ";
-        $stmtSave=$conn->prepare($sql);
-        $stmtSave->bind_param("iiii",$saved_list_id,$user_id,$limit,$offset);
+        $stmtSave = $conn->prepare($sql);
+        $stmtSave->bind_param("iiii", $saved_list_id, $user_id, $limit, $offset);
         $stmtSave->execute();
-        $result=$stmtSave->get_result();
+        $result = $stmtSave->get_result();
         $posts = [];
         while ($row = $result->fetch_assoc()) {
             $row["creator"] = [
@@ -335,5 +344,5 @@ class SaveController
 
 
     }
-    
+
 }

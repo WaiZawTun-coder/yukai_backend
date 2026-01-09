@@ -223,7 +223,7 @@ class PostController
             );
 
             $row["attachments"] = [];
-            $posts[$row["post_id"]] = $row;
+            $posts[$row["post_id"]][] = $row;
         }
 
         self::attachAttachments($conn, $posts);
@@ -340,7 +340,7 @@ class PostController
             );
 
             $row["attachments"] = [];
-            $posts[$row["post_id"]] = $row;
+            $posts[$row["post_id"]][] = $row;
         }
 
         self::attachAttachments($conn, $posts);
@@ -359,10 +359,18 @@ class PostController
     /* =====================================================
      * Get posts by post ID
      * ===================================================== */
-    public static function getPostsByPostId($post_id)
+    public static function getPostsByPostId()
     {
         $conn = Database::connect();
-        $post_id = (int) ($post_id ?? 0);
+        // $post_id = (int) ($post_id ?? 0);
+        $post_id = (int) $_GET["post_id"] ?? 0;
+
+        if ($post_id == 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid post_id"
+            ], 404);
+        }
 
         $user = Auth::getUser();
         $user_id = $user["user_id"] ?? 0;
@@ -1315,7 +1323,7 @@ GROUP BY p.post_id
             return;
         }
 
-        $page = $_GET["page"] ?? 1;
+        $page = (int) $_GET["page"] ?? 1;
 
         $limit = 10;
         $offset = ($page - 1) * $limit;
@@ -1373,12 +1381,13 @@ GROUP BY p.post_id
             "data" => array_values($comments),
         ]);
     }
-    public static function getPostsByFriends(){
-        $conn=Database::connect();
+    public static function getPostsByFriends()
+    {
+        $conn = Database::connect();
         // $user = Auth::getUser();
         // $user_id = $user["user_id"] ?? 0;
         $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
-        $user_id=(int)(Request::input("user_id")?? 0);
+        $user_id = (int) (Request::input("user_id") ?? 0);
         $limit = 5;
         $offset = ($page - 1) * $limit;
         $sql = "SELECT 
@@ -1424,10 +1433,10 @@ GROUP BY p.post_id
                 LIMIT ? OFFSET ?
 
         ";
-        $stmtSave=$conn->prepare($sql);
-        $stmtSave->bind_param("iiii",$user_id,$user_id,$limit,$offset);
+        $stmtSave = $conn->prepare($sql);
+        $stmtSave->bind_param("iiii", $user_id, $user_id, $limit, $offset);
         $stmtSave->execute();
-        $result=$stmtSave->get_result();
+        $result = $stmtSave->get_result();
         $posts = [];
         while ($row = $result->fetch_assoc()) {
             $row["creator"] = [
@@ -1444,12 +1453,12 @@ GROUP BY p.post_id
             );
 
             $row['attachments'] = [];
-            $posts[$row['post_id']] = $row;
+            $posts[$row['post_id']][] = $row;
         }
 
         PostController::attachAttachments($conn, $posts);
 
-        $totalPosts = PostController::getPostCount();
+        $totalPosts = PostController::getFriendsPostCount($user_id);
         $totalPages = ceil($totalPosts / $limit);
 
         Response::json([
@@ -1489,6 +1498,20 @@ GROUP BY p.post_id
         $result = $stmt->get_result();
 
         return (int) $result->fetch_assoc()['total'];
+    }
+
+    public static function getFriendsPostCount($userId = 0)
+    {
+        $conn = Database::connect();
+
+        if ($userId === 0) {
+            $stmt = $conn->prepare("SELECT COUNT(*) AS total FROM posts p JOIN users u ON u.user_id = p.creator_user_id JOIN friends f ON (f.user_1_id = ? AND f.user_2_id = p.creator_user_id) OR (f.user_2_id = ? AND f.user_1_id = p.creator_user_id) WHERE is_deleted = 0");
+
+            $stmt->bind_param("ii", $userId, $userId);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            return (int) $result->fetch_assoc()["total"];
+        }
     }
 
     private static function getFollowingPostCount($userId)
