@@ -576,10 +576,10 @@ class AuthController
         $subject = "Password Rest OTP";
         $body = "Hello,
 
-        Dear Trader,
-        \n\nYour OTP code is: $otpcode\n\nThis code expires in 5 minutes.\n\n
-        We are updating account records to ensure uninterrupted access.
-        Please review your account information at your earliest convenience.
+        Dear User,
+        \n\nYour One-Time Password (OTP) for account verification is:\n\n  $otpcode\n\n This OTP is valid for 2 minutes.PLease Do not share this code with anyone.\n\n
+        If you didn't request this code,please ignore this email.\n\n
+        Thank you for using our service!\n\n
 
         Best regards,
         May Thingyan Support Team";

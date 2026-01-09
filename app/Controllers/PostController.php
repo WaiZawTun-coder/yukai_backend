@@ -670,6 +670,394 @@ GROUP BY p.post_id
     }
 
     /* =====================================================
+     * Edit Post
+     * ===================================================== */
+    public static function editPost()
+    {
+        $conn = Database::connect();
+        $creator_id = (int) (Request::input("creator_id") ?? 0);
+        $post_id = (int) (Request::input("post_id") ?? 0);
+        $content = trim(Request::input("content") ?? '');
+        $privacy =trim( Request::input("privacy") ?? 'public');
+        $is_deleted=(int)(Request::input("is_deleted") ?? 0);
+
+        if ($post_id=== 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid post"
+            ], 400);
+        }
+
+        // Start transaction
+        $conn->begin_transaction();
+
+        try {
+            // =============================
+            // Insert post
+            // =============================
+            $sql = "
+                    UPDATE posts
+                    SET content = ?, privacy = ?, is_deleted = ?, updated_at = NOW()
+                    WHERE post_id = ? and creator_user_id=?
+        ";
+
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param(
+                "ssiii",
+                $content,
+                $privacy,
+                $is_deleted,
+                $post_id,
+                $creator_id
+            );
+
+            $stmt->execute();
+
+            
+
+            // =============================
+            // Handle post_attachments (optional)
+            // =============================
+            if (!empty($_FILES['attachments'])) {
+                foreach ($_FILES['attachments']['tmp_name'] as $index => $tmpPath) {
+                    if (!is_uploaded_file($tmpPath))
+                        continue;
+
+                    $fileArray = [
+                        "tmp_name" => $_FILES['attachments']['tmp_name'][$index],
+                        "name" => $_FILES['attachments']['name'][$index],
+                        "type" => $_FILES['attachments']['type'][$index],
+                        "error" => $_FILES['attachments']['error'][$index],
+                        "size" => $_FILES['attachments']['size'][$index],
+                    ];
+
+                    // Upload using ImageService
+                    $uploadResult = ImageService::uploadImage($fileArray, "posts-images");
+
+                    // Store in DB
+                    $attachSql = "
+                        INSERT INTO post_attachments (post_id, file_path, type)
+                        VALUES (?, ?, ?)
+                    ";
+                    $stmtAttach = $conn->prepare($attachSql);
+                    $fileUrl = $uploadResult["secure_url"];
+                    // $mime = mime_content_type($fileArray['tmp_name']) ?? "application/octet-stream";
+                    $fileType = explode("/", $fileArray['type'])[0];
+
+                    $stmtAttach->bind_param(
+                        "iss",
+                        $post_id,
+                        $fileUrl,
+                        $fileType
+                    );
+                    $stmtAttach->execute();
+                }
+            }
+
+
+            // Commit transaction
+            $conn->commit();
+            $user_id = $creator_id;
+
+            $sql = "
+        SELECT 
+    p.post_id,
+    p.creator_user_id,
+    p.shared_post_id,
+    p.privacy,
+    p.content,
+    p.is_archived,
+    p.is_draft,
+    p.is_deleted,
+    p.is_shared,
+    p.created_at,
+    p.updated_at,
+
+    u.display_name,
+    u.gender,
+    u.profile_image,
+
+    COUNT(DISTINCT r.post_react_id) AS react_count,
+    COUNT(DISTINCT c.post_comment_id) AS comment_count,
+
+    CASE 
+        WHEN COUNT(ur.post_react_id) > 0 THEN 1
+        ELSE 0
+    END AS is_liked,
+
+    MAX(ur.reaction) AS reaction
+
+FROM posts p
+JOIN users u 
+    ON u.user_id = p.creator_user_id
+
+LEFT JOIN post_reacts r 
+    ON r.post_id = p.post_id
+
+LEFT JOIN post_comments c 
+    ON c.post_id = p.post_id
+
+LEFT JOIN post_reacts ur 
+    ON ur.post_id = p.post_id
+   AND ur.user_id = ?
+
+WHERE 
+    p.post_id = ?
+    AND p.is_deleted = 0
+    AND (
+        p.privacy = 'public'
+        OR p.creator_user_id = ?
+    )
+
+GROUP BY p.post_id
+    ";
+
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("iii", $user_id, $post_id, $user_id);
+            $stmt->execute();
+
+            $result = $stmt->get_result();
+            $post = $result->fetch_assoc();
+
+            if (!$post) {
+                Response::json([
+                    "status" => false,
+                    "message" => "Post not found or access denied"
+                ], 404);
+                return;
+            }
+
+            $post["creator"] = [
+                "id" => $post["creator_user_id"],
+                "display_name" => $post["display_name"],
+                "gender" => $post["gender"],
+                "profile_image" => $post["profile_image"]
+            ];
+
+            unset(
+                $post["display_name"],
+                $post["gender"],
+                $post["profile_image"]
+            );
+            $posts = [
+                $post["post_id"] => $post
+            ];
+
+            self::attachAttachments($conn, $posts);
+
+            Response::json([
+                "status" => true,
+                "message" => "Post Edit successfully",
+                "post_id" => $post_id,
+                "data" => array_values($posts)
+            ]);
+
+        } catch (\Throwable $e) {
+
+            $conn->rollback();
+
+            Response::json([
+                "status" => false,
+                "message" => "Failed to edit post",
+                "error" => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /* =====================================================
+     * Edit Post by Privacy
+     * ===================================================== */
+    public static function editPostPrivacy()
+    {
+        $conn = Database::connect();
+        $creator_id = (int) (Request::input("creator_id") ?? 0);
+        $post_id = (int) (Request::input("post_id") ?? 0);
+        $privacy =trim( Request::input("privacy") ?? 'public');
+        
+
+        if ($post_id=== 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid post"
+            ], 400);
+        }
+
+        // Start transaction
+        $conn->begin_transaction();
+
+        try {
+            // =============================
+            // Insert post
+            // =============================
+            $sql = "
+                    UPDATE posts
+                    SET privacy = ?,updated_at = NOW()
+                    WHERE post_id = ? and creator_user_id=?
+        ";
+
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param(
+                "sii",
+
+                $privacy,
+                $post_id,
+                $creator_id
+            );
+
+            $stmt->execute();
+
+            
+
+            // =============================
+            // Handle post_attachments (optional)
+            // =============================
+            if (!empty($_FILES['attachments'])) {
+                foreach ($_FILES['attachments']['tmp_name'] as $index => $tmpPath) {
+                    if (!is_uploaded_file($tmpPath))
+                        continue;
+
+                    $fileArray = [
+                        "tmp_name" => $_FILES['attachments']['tmp_name'][$index],
+                        "name" => $_FILES['attachments']['name'][$index],
+                        "type" => $_FILES['attachments']['type'][$index],
+                        "error" => $_FILES['attachments']['error'][$index],
+                        "size" => $_FILES['attachments']['size'][$index],
+                    ];
+
+                    // Upload using ImageService
+                    $uploadResult = ImageService::uploadImage($fileArray, "posts-images");
+
+                    // Store in DB
+                    $attachSql = "
+                        INSERT INTO post_attachments (post_id, file_path, type)
+                        VALUES (?, ?, ?)
+                    ";
+                    $stmtAttach = $conn->prepare($attachSql);
+                    $fileUrl = $uploadResult["secure_url"];
+                    // $mime = mime_content_type($fileArray['tmp_name']) ?? "application/octet-stream";
+                    $fileType = explode("/", $fileArray['type'])[0];
+
+                    $stmtAttach->bind_param(
+                        "iss",
+                        $post_id,
+                        $fileUrl,
+                        $fileType
+                    );
+                    $stmtAttach->execute();
+                }
+            }
+
+
+            // Commit transaction
+            $conn->commit();
+            $user_id = $creator_id;
+
+            $sql = "
+        SELECT 
+    p.post_id,
+    p.creator_user_id,
+    p.shared_post_id,
+    p.privacy,
+    p.content,
+    p.is_archived,
+    p.is_draft,
+    p.is_deleted,
+    p.is_shared,
+    p.created_at,
+    p.updated_at,
+
+    u.display_name,
+    u.gender,
+    u.profile_image,
+
+    COUNT(DISTINCT r.post_react_id) AS react_count,
+    COUNT(DISTINCT c.post_comment_id) AS comment_count,
+
+    CASE 
+        WHEN COUNT(ur.post_react_id) > 0 THEN 1
+        ELSE 0
+    END AS is_liked,
+
+    MAX(ur.reaction) AS reaction
+
+FROM posts p
+JOIN users u 
+    ON u.user_id = p.creator_user_id
+
+LEFT JOIN post_reacts r 
+    ON r.post_id = p.post_id
+
+LEFT JOIN post_comments c 
+    ON c.post_id = p.post_id
+
+LEFT JOIN post_reacts ur 
+    ON ur.post_id = p.post_id
+   AND ur.user_id = ?
+
+WHERE 
+    p.post_id = ?
+    AND p.is_deleted = 0
+    AND (
+        p.privacy = 'public'
+        OR p.creator_user_id = ?
+    )
+
+GROUP BY p.post_id
+    ";
+
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("iii", $user_id, $post_id, $user_id);
+            $stmt->execute();
+
+            $result = $stmt->get_result();
+            $post = $result->fetch_assoc();
+
+            if (!$post) {
+                Response::json([
+                    "status" => false,
+                    "message" => "Post not found or access denied"
+                ], 404);
+                return;
+            }
+
+            $post["creator"] = [
+                "id" => $post["creator_user_id"],
+                "display_name" => $post["display_name"],
+                "gender" => $post["gender"],
+                "profile_image" => $post["profile_image"]
+            ];
+
+            unset(
+                $post["display_name"],
+                $post["gender"],
+                $post["profile_image"]
+            );
+            $posts = [
+                $post["post_id"] => $post
+            ];
+
+            self::attachAttachments($conn, $posts);
+
+            Response::json([
+                "status" => true,
+                "message" => "Post Edit successfully",
+                "post_id" => $post_id,
+                "data" => array_values($posts)
+            ]);
+
+        } catch (\Throwable $e) {
+
+            $conn->rollback();
+
+            Response::json([
+                "status" => false,
+                "message" => "Failed to edit post",
+                "error" => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /* =====================================================
      *  Insert React
      * ===================================================== */
     public static function reactPost()

@@ -55,6 +55,14 @@ Router::add("POST", "/api/create-post", function () {
     PostController::createPost();
 }, true); // create post
 
+Router::add("GET", "/api/edit-post", function () {
+PostController::editPost();
+}, true); // edit post
+
+Router::add("GET", "/api/edit-post-privacy", function () {
+PostController::editPostPrivacy();
+}, true); // edit post by privacy
+
 Router::add("POST", "/api/react-post", function () {
     PostController::reactPost();
 }, true); // insert react
@@ -86,6 +94,7 @@ SaveController::createSavedLists();
 Router::add("POST", "/api/save-post", function () {
 SaveController::createSavedPosts();
 }, true); // create saved posts
+
 
 Router::add("GET", "/api/get-saved-lists", function () {
 SaveController::getSavedLists();
