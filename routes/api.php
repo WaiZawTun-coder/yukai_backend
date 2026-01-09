@@ -4,6 +4,7 @@ use App\Controllers\PostController;
 use App\Controllers\FriendController;
 use App\Controllers\UserController;
 use App\Controllers\SaveController;
+use App\Core\Auth;
 
 // public routes
 Router::add("GET", "/", function () {
@@ -59,6 +60,14 @@ Router::add("POST", "/api/create-post", function () {
     PostController::createPost();
 }, true); // create post
 
+Router::add("GET", "/api/edit-post", function () {
+PostController::editPost();
+}, true); // edit post
+
+Router::add("GET", "/api/edit-post-privacy", function () {
+PostController::editPostPrivacy();
+}, true); // edit post by privacy
+
 Router::add("POST", "/api/react-post", function () {
     PostController::reactPost();
 }, true); // insert react
@@ -113,6 +122,7 @@ Router::add("POST", "/api/save-post", function () {
     SaveController::createSavedPosts();
 }, true); // create saved posts
 
+
 Router::add("GET", "/api/get-saved-lists", function () {
     SaveController::getSavedLists();
 }, true); // get Saved Lists
@@ -129,6 +139,24 @@ Router::add("GET", "/api/delete-saved-posts", function () {
     SaveController::deleteSavedPosts();
 }, true); // delete saved posts
 
+// Router::add("POST", "/auth/generateOTP", function () {
+// AuthController::generateOTP();
+// }, true); // generate otp 
 
+// Router::add("POST", "/auth/verifyOTP", function () {
+// AuthController::verifyOTP();
+// }, true); // verify otp
+
+// Router::add("POST", "/auth/send-email", function () {
+// AuthController::sendEmail();
+// }, false); // send email
+
+Router::add("POST", "/auth/forget-password", function () {
+AuthController::forgetPassword();
+}, true); // forget password
+
+Router::add("POST", "/auth/reset-password", function () {
+AuthController::resetPassword();
+}, true); // reset password
 
 

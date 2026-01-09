@@ -235,7 +235,10 @@ class SaveController
             ]);
         }
 
-        $savedLists = $result->fetch_assoc();
+        $savedLists = [];
+        while ($row = $result->fetch_assoc()) {
+            $savedLists[] = $row;
+        }
 
         Response::json(
             [
