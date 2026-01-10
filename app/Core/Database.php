@@ -45,7 +45,6 @@ class Database
             "host" => getenv("DB_HOST") ?: "127.0.0.1",
             "port" => (int) (getenv("DB_PORT") ?: 3306),
             "user" => getenv("DB_USER") ?: "root",
-<<<<<<< HEAD
             "password" => getenv("DB_PASSWORD") ?: "May1234!",
 =======
             "password" => getenv("DB_PASSWORD") ?: "W@i1Z@w4Tun2002",
