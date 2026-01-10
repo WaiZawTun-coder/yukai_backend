@@ -3,6 +3,7 @@ use App\Controllers\AuthController;
 use App\Controllers\PostController;
 use App\Controllers\UserController;
 use App\Controllers\SaveController;
+use App\Controllers\SearchController;
 use App\Core\Auth;
 
 // public routes
@@ -136,4 +137,7 @@ Router::add("POST", "/auth/reset-password", function () {
 AuthController::resetPassword();
 }, true); // reset password
 
+Router::add("POST", "/api/search", function () {
+SearchController::search();
+}, true); // search 
 
