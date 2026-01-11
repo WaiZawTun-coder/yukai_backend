@@ -36,10 +36,10 @@ Router::add("GET", "/api/profile", function () {
 }, true);
 
 
-// posts
-Router::add("GET", "/api/get-posts", function () {
-    PostController::getPosts();
-}, true); // get all posts
+// // posts
+// Router::add("GET", "/api/get-posts", function () {
+//     PostController::getPosts();
+// }, true); // get all posts
 
 Router::add("GET", "/api/get-user-post", function () {
     PostController::getPostsByUserId();
@@ -77,8 +77,9 @@ Router::add("POST", "/api/comment-post", function () {
     PostController::commentPost();
 
 }, false); // insert comment
+
 Router::add("GET", "/api/get-postAll", function () {
-    PostController::getPost();
+    PostController::getPosts();
 }, false); // retrun all posts
 
 

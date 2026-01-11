@@ -33,35 +33,44 @@ class SearchController{
 
         $search_word = "%{$keyword}%";
 
-        $data = [
-            "users" => [],
-            "posts" => []
-        ];
+        $data = [];
 
         /* =======================
            SEARCH USERS
         ======================= */
 
         $sql = "
-            SELECT user_id, username, display_name, profile_image
-            FROM users
-            WHERE display_name LIKE ?
+            SELECT u.user_id, u.username, u.display_name, u.profile_image
+            FROM users u
+            WHERE u.display_name LIKE ?
             AND is_active = 1
+            AND NOT EXISTS (
+            SELECT 1
+            FROM blocks b
+            WHERE b.status = 1 AND (
+                (b.blocker_user_id = ? AND b.blocked_user_id = u.user_id)
+                OR
+                (b.blocker_user_id = u.user_id AND b.blocked_user_id = ?)
+            )
+        )
             LIMIT ? OFFSET ?
         ";
 
         $stmt = $conn->prepare($sql);
-        $stmt->bind_param("sii", $search_word, $limit, $offset);
+        $stmt->bind_param("siiii", $search_word,$user_id,$user_id, $limit, $offset);
         $stmt->execute();
         $users_result = $stmt->get_result();
 
+        $totalUsers = self::userCountByKeyword($search_word, $user_id);
+        $userTotalPages = ceil($totalUsers / $limit);
+
         while ($user = $users_result->fetch_assoc()) {
-            $data["users"][] = [
-                "type" => "user",
-                "id" => $user["user_id"],
+            $data[] = [
+                "user_id" => $user["user_id"],
                 "display_name" => $user["display_name"],
                 "username" => $user["username"],
-                "profile_image" => $user["profile_image"]
+                "profile_image" => $user["profile_image"],
+                "total_pages" => $userTotalPages
             ];
         }
 
@@ -110,6 +119,15 @@ class SearchController{
                 p.is_deleted = 0
                 AND p.is_draft = 0
                 AND p.content LIKE ?
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM blocks b
+                    WHERE b.status = 1 AND (
+                        (b.blocker_user_id = ? AND b.blocked_user_id = p.creator_user_id)
+                        OR
+                        (b.blocker_user_id = p.creator_user_id AND b.blocked_user_id = ?)
+                    )
+                )
                 AND (
                     p.privacy = 'public'
                     OR (
@@ -127,20 +145,21 @@ class SearchController{
                         )
                     )
                 )
-
+                 
             GROUP BY p.post_id
             ORDER BY p.created_at DESC
             LIMIT ? OFFSET ?
         ";
     
-
         $stmt = $conn->prepare($sql);
         $stmt->bind_param(
-            "isiiii",
+            "isiiiiii",
             $user_id,      
             $search_word,  
             $user_id,      
-            $user_id,     
+            $user_id, 
+            $user_id,
+            $user_id,    
             $limit,
             $offset
         );
@@ -171,11 +190,16 @@ class SearchController{
 
         PostController::attachAttachments($conn, $posts);
 
-        $data["posts"] = array_values($posts);
+        // $data["posts"] = array_values($posts);
 
         
         $totalPosts = self::postCountByKeywords($search_word,$user_id);
-        $totalPages = ceil($totalPosts / $limit);
+        $totalPostPages = ceil($totalPosts / $limit);
+
+       foreach ($posts as $post) {
+        $post["total_pages"] = $totalPostPages;
+        $data[] = $post;
+    }
 
         /* =======================
            RESPONSE
@@ -184,8 +208,7 @@ class SearchController{
         Response::json([
             "status" => true,
             "keyword" => $keyword,
-            "page" => $page,
-            "totalPages" => $totalPages,
+            
             "data" => $data
         ]);
     }
@@ -226,5 +249,33 @@ class SearchController{
 
         return (int) $stmt->get_result()->fetch_assoc()['total'];
     }
+
+    private static function userCountByKeyword($search_word, $user_id)
+{
+        $conn = Database::connect();
+
+        $sql = "
+            SELECT COUNT(*) AS total
+            FROM users u
+            WHERE u.display_name LIKE ?
+            AND u.is_active = 1
+            AND NOT EXISTS (
+                SELECT 1
+                FROM blocks b
+                WHERE b.status = 1 AND (
+                    (b.blocker_user_id = ? AND b.blocked_user_id = u.user_id)
+                    OR
+                    (b.blocker_user_id = u.user_id AND b.blocked_user_id = ?)
+                )
+            )
+        ";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("sii", $search_word, $user_id, $user_id);
+        $stmt->execute();
+
+        return (int) $stmt->get_result()->fetch_assoc()['total'];
+}
+
 
 }

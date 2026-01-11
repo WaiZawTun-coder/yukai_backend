@@ -40,7 +40,7 @@ class PostController
     /* =====================================================
      * Get all posts
      * ===================================================== */
-    public static function getPosts()
+    public static function getPosts()  
     {
         $conn = Database::connect();
 
