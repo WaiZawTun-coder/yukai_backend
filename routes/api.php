@@ -75,7 +75,7 @@ Router::add("POST", "/api/react-post", function () {
 
 Router::add("POST", "/api/comment-post", function () {
     PostController::commentPost();
-}, false); // insert comment
+}, true); // insert comment
 
 
 Router::add("DELETE", "/api/delete-comment", function () {
