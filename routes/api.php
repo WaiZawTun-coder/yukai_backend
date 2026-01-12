@@ -37,9 +37,9 @@ Router::add("GET", "/api/profile", function () {
 
 
 // // posts
-// Router::add("GET", "/api/get-posts", function () {
-//     PostController::getPosts();
-// }, true); // get all posts
+Router::add("GET", "/api/get-posts", function () {
+    PostController::getPosts();
+}, true); // get all posts
 
 Router::add("GET", "/api/get-user-post/{username}", function ($username) {
     PostController::getPostsByUsername($username);
@@ -76,10 +76,6 @@ Router::add("POST", "/api/react-post", function () {
 Router::add("POST", "/api/comment-post", function () {
     PostController::commentPost();
 }, false); // insert comment
-
-Router::add("GET", "/api/get-postAll", function () {
-    PostController::getPosts();
-}, false); // retrun all posts
 
 
 Router::add("DELETE", "/api/delete-comment", function () {
@@ -165,6 +161,6 @@ Router::add("POST", "/auth/reset-password", function () {
 }, true); // reset password
 
 Router::add("POST", "/api/search", function () {
-SearchController::search();
+    SearchController::search();
 }, true); // search 
 
