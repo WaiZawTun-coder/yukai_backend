@@ -4,6 +4,7 @@ use App\Controllers\PostController;
 use App\Controllers\FriendController;
 use App\Controllers\UserController;
 use App\Controllers\SaveController;
+use App\Controllers\SearchController;
 use App\Core\Auth;
 
 // public routes
@@ -35,10 +36,10 @@ Router::add("GET", "/api/profile", function () {
 }, true);
 
 
-// posts
-Router::add("GET", "/api/get-posts", function () {
-    PostController::getPosts();
-}, true); // get all posts
+// // posts
+// Router::add("GET", "/api/get-posts", function () {
+//     PostController::getPosts();
+// }, true); // get all posts
 
 Router::add("GET", "/api/get-user-post/{username}", function ($username) {
     PostController::getPostsByUsername($username);
@@ -75,6 +76,10 @@ Router::add("POST", "/api/react-post", function () {
 Router::add("POST", "/api/comment-post", function () {
     PostController::commentPost();
 }, false); // insert comment
+
+Router::add("GET", "/api/get-postAll", function () {
+    PostController::getPosts();
+}, false); // retrun all posts
 
 
 Router::add("DELETE", "/api/delete-comment", function () {
@@ -159,4 +164,7 @@ Router::add("POST", "/auth/reset-password", function () {
     AuthController::resetPassword();
 }, true); // reset password
 
+Router::add("POST", "/api/search", function () {
+SearchController::search();
+}, true); // search 
 
