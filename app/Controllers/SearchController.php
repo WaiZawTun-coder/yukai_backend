@@ -33,7 +33,19 @@ class SearchController{
 
         $search_word = "%{$keyword}%";
 
-        $data = [];
+        $data = [
+                "users" => [
+                    "page" => $page,
+                    "total_pages" => 0,
+                    "data" => []
+                ],
+                "posts" => [
+                    "page" => $page,
+                    "total_pages" => 0,
+                    "data" => []
+                ]
+                ];
+
 
         /* =======================
            SEARCH USERS
@@ -63,14 +75,15 @@ class SearchController{
 
         $totalUsers = self::userCountByKeyword($search_word, $user_id);
         $userTotalPages = ceil($totalUsers / $limit);
+        $data["users"]["total_pages"] = $userTotalPages;
 
         while ($user = $users_result->fetch_assoc()) {
-            $data[] = [
+            $data["users"]["data"][] = [
                 "user_id" => $user["user_id"],
                 "display_name" => $user["display_name"],
                 "username" => $user["username"],
-                "profile_image" => $user["profile_image"],
-                "total_pages" => $userTotalPages
+                "profile_image" => $user["profile_image"]
+                
             ];
         }
 
@@ -195,11 +208,9 @@ class SearchController{
         
         $totalPosts = self::postCountByKeywords($search_word,$user_id);
         $totalPostPages = ceil($totalPosts / $limit);
-
-       foreach ($posts as $post) {
-        $post["total_pages"] = $totalPostPages;
-        $data[] = $post;
-    }
+        $data["posts"]["total_pages"] = $totalPostPages;
+        $data["posts"]["data"] = array_values($posts);
+       
 
         /* =======================
            RESPONSE
