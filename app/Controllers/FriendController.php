@@ -204,7 +204,11 @@ class FriendController
     {
         $conn = Database::connect();
         $input = Request::json();
-        $sender_id = (int) ($input['user_1_id'] ?? 0);
+        // $sender_id = (int) ($input['user_1_id'] ?? 0);
+
+        $user = Auth::getUser();
+        $sender_id = $user["user_id"];
+
         $friendRequentList =
             "SELECT f.user_2_id as requsted_user_id,
                 u.display_name,

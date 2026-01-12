@@ -1,4 +1,5 @@
 <?php
+
 use App\Controllers\AuthController;
 use App\Controllers\FriendController;
 use App\Controllers\PostController;
