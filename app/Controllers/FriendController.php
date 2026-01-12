@@ -197,5 +197,106 @@ class FriendController{
 
 
     }
+    public static function followUser(){
+        $conn=Database::connect();
+        $input=Request::json();
+        $follower_id=(int)($input['follower_id']?? 0); // login user
+        $following_id=(int)($input['following_id']?? 0);
 
- }
+        if( $follower_id===0 || $following_id===0 || $follower_id==$following_id ){
+            Response::json([
+                "status"=>false,
+                "message"=>"Invalid Follower"
+            ]);
+        }
+
+        $checkSql="SELECT follow_id from follows where(follower_user_id=? AND following_user_id=?)";
+        $followingCheck=$conn->prepare("$checkSql");
+        $followingCheck->bind_param("ii",$follower_id,$following_id);
+        $followingCheck->execute();
+        Response::json([
+                "status"=>false,
+                "message"=>"Already follow this user"
+        ]);
+
+        $followerSql="INSERT INTO follows(follower_user_id,following_user_id) values(?,?)";
+        $follower=$conn->prepare($followerSql);
+        $follower->bind_param("ii",$follower_id,$following_id);
+        $follower->execute();
+        Response::json([
+                "status"=>true,
+                "message"=>"Following request sent"
+        ]);
+    }
+    public static function unfollowUser(){
+        $conn=Database::connect();
+        $input=Request::json();
+        $follower_id=(int)($input['follower_id']?? 0); // login user
+        $following_id=(int)($input['following_id']?? 0);
+
+        if($follower_id===$following_id){
+           Response::json([
+                "status"=>false,
+                "message"=>"Invalid user_id"
+           ]);
+           return;
+        }
+        $unfollowSql="Update follows SET status=0 where (follower_user_id=? AND following_user_id=?) AND status=1 ";
+        $unfollow=$conn->prepare($unfollowSql);
+        $unfollow->bind_param("ii",$follower_id,$following_id);
+        $unfollow->execute();
+        Response::json([
+                "status"=>true,
+                "message"=>"Cancel following"
+        ]);
+    }
+    public static function blockUser(){
+        $conn=Database::connect();
+        $input=Request::json();
+        $blocker_User=(int)($input['blocker_user_id']?? 0);//login user
+        $blocked_User=(int)($input['blocked_user_id']?? 0);
+        //self block
+        if($blocker_User===$blocked_User){
+            Response::json([
+                    "status"=>false,
+                    "message"=>"Invalid user_id"
+            ]);
+        }
+
+        $conn->begin_transaction();
+        
+            try{
+                $blockUserSql="INSERT INTO blocks (blocker_user_id,blocked_user_id) values (?,?)";
+                $blockUser=$conn->prepare($blockUserSql);
+                $blockUser->bind_param("ii",$blocker_User,$blocked_User);
+                $blockUser->execute();
+        //     Response::json([
+        //          "status" => true,
+        //          "message" => "Block successful"
+        // ]);
+                $removeFollowerSql="Update follows set status=0 where (follower_user_id=? AND following_user_id=?) OR (follower_user_id=? AND following_user_id=?)";
+                $removeFollower=$conn->prepare($removeFollowerSql);
+                $removeFollower->bind_param("iiii",$blocker_User,$blocked_User,$blocker_User,$blocked_User);
+                $removeFollower->execute();
+
+                $removeFriendSql="Update friends set status=null where (user_1_id=? and user_2_id=?) OR (user_1_id=? AND user_2_id=?)";
+                $removeFriend=$conn->prepare($removeFriendSql);
+                $removeFriend->bind_param("iiii",$blocker_User,$blocked_User,$blocker_User,$blocked_User);
+                $removeFriend->execute();
+                $conn->commit();
+                Response::json([
+                      "status"=>true,
+                      "message"=>"block user successful"
+                 ]);  
+                }catch(\Exception $e){
+                     $conn->rollback();
+                     Response::json([
+                           "status"=>false,
+                           "message"=>"message failed"
+                 ]);
+    }
+
+
+    }
+
+}

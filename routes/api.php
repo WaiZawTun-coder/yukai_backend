@@ -52,7 +52,7 @@ Router::add("GET", "/api/get-friends-posts", function () {
     PostController::getPostsByFriends();
 }, true); // get friens posts
 
-Router::add("GET", "/api/get-post", function () {
+Router::add("GET", "/api/get-post-by-postId", function () {
     PostController::getPostsByPostId();
 }, true);
 
@@ -76,10 +76,9 @@ Router::add("POST", "/api/comment-post", function () {
     PostController::commentPost();
 
 }, false); // insert comment
-Router::add("GET", "/api/get-postAll", function () {
-    PostController::getPost();
-}, false); // retrun all posts
-
+// Router::add("GET", "/api/get-postAll", function () {
+//     PostController::getPosts();
+// }, false); // retrun all posts
 
 Router::add("DELETE", "/api/delete-comment", function () {
     PostController::commentDelete();
@@ -92,27 +91,11 @@ Router::add("GET", "/api/get-comment/{post_id}", function ($post_id) {
 Router::add("DELETE", "/api/delete-post", function () {
     PostController::postDelete();
 }, true); // delete post
-Router::add("POST","/api/send-request", function(){
-    FriendController::sendFriendRequest();
-}, true);//send friend requent
-Router::add("POST","/api/response-request", function(){
-    FriendController::responseFriendRequest();
-},true);//accept,reject,cancel friend request
-Router::add("GET","/api/get-sent-requests",function(){
-    FriendController::getFriendRequest();
-},true);//get Friend Request
-Router::add("GET","/api/get-received-requests",function(){
-    FriendController::getReceivedRequests();
-},true);
-Router::add("GET","/api/get-people-you-may-know", function(){
-    FriendController::peopleYouMayKnow();
-},protected:false);
 
 
-
-// Router::add("POST", "/api/save-post", function () {
-// SaveController::savePost();
-// }, true); // save post
+Router::add("POST", "/api/save-post", function () {
+SaveController::savePost();
+}, true); // save post
 
 Router::add("POST", "/api/create-saved-list", function () {
     SaveController::createSavedLists();
@@ -137,7 +120,25 @@ Router::add("GET", "/api/update-saved-posts", function () {
 
 Router::add("GET", "/api/delete-saved-posts", function () {
     SaveController::deleteSavedPosts();
-}, true); // delete saved posts
+}, true); 
+
+//friends
+Router::add("POST","/api/send-request", function(){
+    FriendController::sendFriendRequest();
+}, true);//send friend requent
+Router::add("POST","/api/response-request", function(){
+    FriendController::responseFriendRequest();
+},true);//accept,reject,cancel friend request
+Router::add("GET","/api/get-sent-requests",function(){
+    FriendController::getFriendRequest();
+},true);//get Friend Request
+Router::add("GET","/api/get-received-requests",function(){
+    FriendController::getReceivedRequests();
+},true);
+Router::add("GET","/api/get-people-you-may-know", function(){
+    FriendController::peopleYouMayKnow();
+},true);
+// delete saved posts
 
 // Router::add("POST", "/auth/generateOTP", function () {
 // AuthController::generateOTP();
@@ -151,6 +152,7 @@ Router::add("GET", "/api/delete-saved-posts", function () {
 // AuthController::sendEmail();
 // }, false); // send email
 
+//passwords
 Router::add("POST", "/auth/forget-password", function () {
 AuthController::forgetPassword();
 }, true); // forget password
@@ -158,5 +160,17 @@ AuthController::forgetPassword();
 Router::add("POST", "/auth/reset-password", function () {
 AuthController::resetPassword();
 }, true); // reset password
+
+//followers
+Router::add("POST","/api/follow", function(){
+    FriendController::followUser();
+},false);
+Router::add("POST","/api/unfollow", function(){
+    FriendController::unfollowUser();
+},false);
+Router::add("POST","/api/block-user", function(){
+    FriendController::blockUser();
+},false);
+
 
 
