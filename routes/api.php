@@ -61,11 +61,11 @@ Router::add("POST", "/api/create-post", function () {
 }, true); // create post
 
 Router::add("GET", "/api/edit-post", function () {
-PostController::editPost();
+    PostController::editPost();
 }, true); // edit post
 
 Router::add("GET", "/api/edit-post-privacy", function () {
-PostController::editPostPrivacy();
+    PostController::editPostPrivacy();
 }, true); // edit post by privacy
 
 Router::add("POST", "/api/react-post", function () {
@@ -74,11 +74,7 @@ Router::add("POST", "/api/react-post", function () {
 
 Router::add("POST", "/api/comment-post", function () {
     PostController::commentPost();
-
 }, false); // insert comment
-Router::add("GET", "/api/get-postAll", function () {
-    PostController::getPost();
-}, false); // retrun all posts
 
 
 Router::add("DELETE", "/api/delete-comment", function () {
@@ -92,21 +88,25 @@ Router::add("GET", "/api/get-comment/{post_id}", function ($post_id) {
 Router::add("DELETE", "/api/delete-post", function () {
     PostController::postDelete();
 }, true); // delete post
-Router::add("POST","/api/send-request", function(){
+
+Router::add("GET", "/api/get-friends", function () {
+    FriendController::getFriends();
+}, true);
+Router::add("POST", "/api/send-request", function () {
     FriendController::sendFriendRequest();
 }, true);//send friend requent
-Router::add("POST","/api/response-request", function(){
+Router::add("POST", "/api/response-request", function () {
     FriendController::responseFriendRequest();
-},true);//accept,reject,cancel friend request
-Router::add("GET","/api/get-sent-requests",function(){
+}, true);//accept,reject,cancel friend request
+Router::add("GET", "/api/get-sent-requests", function () {
     FriendController::getFriendRequest();
-},true);//get Friend Request
-Router::add("GET","/api/get-received-requests",function(){
+}, true);//get Friend Request
+Router::add("GET", "/api/get-received-requests", function () {
     FriendController::getReceivedRequests();
-},true);
-Router::add("GET","/api/get-people-you-may-know", function(){
+}, true);
+Router::add("GET", "/api/get-people-you-may-know", function () {
     FriendController::peopleYouMayKnow();
-},protected:false);
+}, protected: true);
 
 
 
@@ -152,11 +152,11 @@ Router::add("GET", "/api/delete-saved-posts", function () {
 // }, false); // send email
 
 Router::add("POST", "/auth/forget-password", function () {
-AuthController::forgetPassword();
+    AuthController::forgetPassword();
 }, true); // forget password
 
 Router::add("POST", "/auth/reset-password", function () {
-AuthController::resetPassword();
+    AuthController::resetPassword();
 }, true); // reset password
 
 
