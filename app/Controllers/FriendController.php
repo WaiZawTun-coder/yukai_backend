@@ -76,54 +76,85 @@ class FriendController
 
     public static function sendFriendRequest()
     {
-
         $conn = Database::connect();
         $input = Request::json();
 
         $user = Auth::getUser();
-        $user_1_id = $user["user_id"];
+        $user_1_id = (int) $user["user_id"]; // sender
+        $user_2_id = (int) ($input['user_id'] ?? 0); // receiver
 
-        $user_2_id = (int) ($input['user_id'] ?? 0);//receiver
-        if ($user_1_id == $user_2_id || $user_2_id === 0 || $user_1_id === 0) {
+        if ($user_1_id === 0 || $user_2_id === 0 || $user_1_id === $user_2_id) {
             Response::json([
                 "status" => false,
                 "message" => "Invalid user"
             ]);
-
+            return;
         }
-        $checkSql = "SELECT friend_id, status from friends where (user_1_id=? AND user_2_id=?) or (user_1_id=? AND user_2_id=?)";
+
+        // check existing relation (both directions)
+        $checkSql = "
+        SELECT friend_id, status
+        FROM friends
+        WHERE (user_1_id=? AND user_2_id=?)
+           OR (user_1_id=? AND user_2_id=?)
+        LIMIT 1
+    ";
         $check = $conn->prepare($checkSql);
         $check->bind_param("iiii", $user_1_id, $user_2_id, $user_2_id, $user_1_id);
         $check->execute();
-        $checkresult = $check->get_result();
-        $checkStatus = $checkresult->fetch_assoc()["status"];
+        $result = $check->get_result();
 
-        if ($checkresult->num_rows > 0 && $checkStatus == "pending") {
-            Response::json([
-                "stauts" => false,
-                "message" => "Friend Request already exists"
-            ]);
+        if ($result->num_rows > 0) {
 
-        }
+            $row = $result->fetch_assoc();
 
-        if ($checkStatus !== "pending") {
-            $friendSql = "UPDATE friends SET status='pending', user_1_id=?, user_2_id=? WHERE (user_1_id = ? AND user_2_id = ?) OR (user_1_id = ? AND user_2_id = ?)";
-            $stmt = $conn->prepare($friendSql);
-            $stmt->bind_param("iiiiii", $user_1_id, $user_2_id, $user_1_id, $user_2_id, $user_2_id, $user_1_id);
+            if ($row["status"] === "pending") {
+                Response::json([
+                    "status" => false,
+                    "message" => "Friend request already exists"
+                ]);
+                return;
+            }
+
+            if ($row["status"] === "accepted") {
+                Response::json([
+                    "status" => false,
+                    "message" => "You are already friends"
+                ]);
+                return;
+            }
+
+            // reuse row → set to pending again
+            $updateSql = "
+            UPDATE friends
+            SET status='pending', user_1_id=?, user_2_id=?
+            WHERE friend_id=?
+        ";
+            $stmt = $conn->prepare($updateSql);
+            $stmt->bind_param("iii", $user_1_id, $user_2_id, $row["friend_id"]);
+
         } else {
-            $friendSql = "INSERT INTO friends(user_1_id,user_2_id,status) values(?,?,'pending')";
-            $stmt = $conn->prepare($friendSql);
+
+            // no record → insert new
+            $insertSql = "
+            INSERT INTO friends (user_1_id, user_2_id, status)
+            VALUES (?, ?, 'pending')
+        ";
+            $stmt = $conn->prepare($insertSql);
             $stmt->bind_param("ii", $user_1_id, $user_2_id);
         }
+
         $stmt->execute();
 
+        // auto follow sender -> receiver
         self::addFollow($conn, true, $user_1_id, $user_2_id);
 
         Response::json([
             "status" => true,
-            "message" => "Friend requet sent"
+            "message" => "Friend request sent"
         ]);
     }
+
 
     public static function responseFriendRequest()
     {
@@ -444,10 +475,35 @@ class FriendController
 
     private static function addFollow($conn, $follow, $user_1_id, $user_2_id)
     {
-        $followSql = "INSERT INTO follows (follower_user_id, following_user_id, status) VALUES (?, ?, 1)";
+        if (!$follow)
+            return;
+
+        // check existing follow
+        $checkSql = "
+        SELECT follow_id
+        FROM follows
+        WHERE follower_user_id = ?
+          AND following_user_id = ?
+        LIMIT 1
+    ";
+        $checkStmt = $conn->prepare($checkSql);
+        $checkStmt->bind_param("ii", $user_1_id, $user_2_id);
+        $checkStmt->execute();
+        $res = $checkStmt->get_result();
+
+        if ($res->num_rows > 0) {
+            return; // already following
+        }
+
+        // insert follow
+        $followSql = "
+        INSERT INTO follows (follower_user_id, following_user_id, status)
+        VALUES (?, ?, 1)
+    ";
         $followStmt = $conn->prepare($followSql);
         $followStmt->bind_param("ii", $user_1_id, $user_2_id);
         $followStmt->execute();
     }
+
 
 }

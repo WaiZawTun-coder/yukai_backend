@@ -1,7 +1,7 @@
 <?php
 use App\Controllers\AuthController;
-use App\Controllers\PostController;
 use App\Controllers\FriendController;
+use App\Controllers\PostController;
 use App\Controllers\UserController;
 use App\Controllers\SaveController;
 use App\Controllers\SearchController;
