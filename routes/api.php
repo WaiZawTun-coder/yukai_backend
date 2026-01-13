@@ -171,6 +171,12 @@ Router::add("POST","/api/unfollow", function(){
 Router::add("POST","/api/block-user", function(){
     FriendController::blockUser();
 },false);
+Router::add("POST","/api/unblock",function(){
+    FriendController::unblockUser();
+},false);
+Router::add("POST","/api/unfriend",function(){
+    FriendController::unfriend();
+},false);
 
 
 

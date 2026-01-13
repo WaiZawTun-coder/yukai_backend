@@ -256,7 +256,7 @@ class FriendController{
         $blocker_User=(int)($input['blocker_user_id']?? 0);//login user
         $blocked_User=(int)($input['blocked_user_id']?? 0);
         //self block
-        if($blocker_User===$blocked_User){
+        if($blocker_User===$blocked_User ||$blocked_User===0 || $blocker_User===0){
             Response::json([
                     "status"=>false,
                     "message"=>"Invalid user_id"
@@ -265,7 +265,7 @@ class FriendController{
 
         $conn->begin_transaction();
         
-            try{
+            // try{
                 $blockUserSql="INSERT INTO blocks (blocker_user_id,blocked_user_id) values (?,?)";
                 $blockUser=$conn->prepare($blockUserSql);
                 $blockUser->bind_param("ii",$blocker_User,$blocked_User);
@@ -274,12 +274,12 @@ class FriendController{
         //          "status" => true,
         //          "message" => "Block successful"
         // ]);
-                $removeFollowerSql="Update follows set status=0 where (follower_user_id=? AND following_user_id=?) OR (follower_user_id=? AND following_user_id=?)";
+                $removeFollowerSql="DELETE FROM  follows where (follower_user_id=? AND following_user_id=?) OR (following_user_id=? AND follower_user_id=?)";
                 $removeFollower=$conn->prepare($removeFollowerSql);
                 $removeFollower->bind_param("iiii",$blocker_User,$blocked_User,$blocker_User,$blocked_User);
                 $removeFollower->execute();
 
-                $removeFriendSql="Update friends set status=null where (user_1_id=? and user_2_id=?) OR (user_1_id=? AND user_2_id=?)";
+                $removeFriendSql="DELETE FROM friends where (user_1_id=? and user_2_id=?) OR (user_2_id=? AND user_1_id=?)";
                 $removeFriend=$conn->prepare($removeFriendSql);
                 $removeFriend->bind_param("iiii",$blocker_User,$blocked_User,$blocker_User,$blocked_User);
                 $removeFriend->execute();
@@ -288,15 +288,72 @@ class FriendController{
                       "status"=>true,
                       "message"=>"block user successful"
                  ]);  
-                }catch(\Exception $e){
-                     $conn->rollback();
-                     Response::json([
-                           "status"=>false,
-                           "message"=>"message failed"
-                 ]);
+                // }catch(\Exception $e){
+                //      $conn->rollback();
+                //      Response::json([
+                //            "status"=>false,
+                //            "message"=>"message failed"
+                //  ]);
+    // }
+   
+
     }
-
-
+    public static function unblockUser(){
+        $conn=Database::connect();
+        $input=Request::json();
+        $unblock_user=(int)($input['unblock_user']?? 0);
+        $unblocked_user=(int)($input['unblocked_user']?? 0);
+        if($unblock_user===$unblocked_user || $unblock_user===0 || $unblocked_user===0){
+            Response::json([
+                    "status"=>false,
+                    "message"=>"Invalid user_id"
+            ]);
+        }
+        $unblockuserSql="DELETE FROM blocks where blocker_user_id=? and blocked_user_id=?";
+        $unblockuser=$conn->prepare($unblockuserSql);
+        $unblockuser->bind_param("ii",$unblock_user,$unblocked_user);
+        $unblockuser->execute();
+        if($unblockuser->affected_rows>0){
+            Response::json([
+            "status"=>true,
+            "message"=>"Unblock this user"
+        ]);
+        }else{
+            Response::json([
+                "status"=>false,
+                "message"=>"you did not block this user so u cannot make unblocking process"
+            ]);
+        }
+        
+    }
+    public static function unfriend(){
+        $conn=Database::connect();
+        $input=Request::json();
+        $user_1_id=(int)($input['user_1_id']?? 0);
+        $user_2_id=(int)($input['user_2_id']?? 0);
+        if($user_1_id===$user_2_id || $user_1_id===0 || $user_2_id===0){
+            Response::json([
+                "status"=>false,
+                "message"=>"invalid user"
+            ]);
+        }
+        $unfriendSql="DELETE FROM friends WHERE user_1_id=? and user_2_id=? AND status='accepted'";
+        $unfriend=$conn->prepare($unfriendSql);
+        $unfriend->bind_param("ii",$user_1_id,$user_2_id);
+        $unfriend->execute();
+        if($unfriend->affected_rows>0){
+            Response::json([
+            "status"=>true,
+            "message"=>"unfriend successfully"
+        ]);
+        }else{
+            Response::json([
+                "status"=>false,
+                "message"=>"you are not friends so you cannot unfriend this user"
+            ]);
+        }
+        
+        
     }
 
 }
