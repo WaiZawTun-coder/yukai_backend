@@ -10,7 +10,7 @@ use App\Core\Auth;
 // public routes
 Router::add("GET", "/", function () {
     echo json_encode(["status" => true, "message" => "success"]);
-}, true);
+}, false);
 Router::add("POST", "/auth/login", function () {
     AuthController::login();
 }, false);
@@ -164,4 +164,24 @@ AuthController::resetPassword();
 Router::add("POST", "/api/search", function () {
 SearchController::search();
 }, true); // search 
+
+Router::add("POST", "/api/edit-user", function () {
+UserController::editUser();
+}, true); // edit user
+
+Router::add("POST", "/api/request-password-otp", function () {
+UserController::requestPasswordOTP();
+}, true); // request password otp
+
+Router::add("POST", "/api/change-password", function () {
+UserController::changepassword();
+}, true); // change password
+
+Router::add("POST", "/api/deactivate-user", function () {
+UserController::deactivateUser();
+}, true); // deactivate user
+
+Router::add("POST", "/api/deleted-account", function () {
+UserController::deletedAccount();
+}, true); // deleted account
 
