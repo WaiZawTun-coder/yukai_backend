@@ -4,6 +4,7 @@ use App\Controllers\PostController;
 use App\Controllers\FriendController;
 use App\Controllers\UserController;
 use App\Controllers\SaveController;
+use App\Controllers\ChattingController;
 use App\Core\Auth;
 
 // public routes
