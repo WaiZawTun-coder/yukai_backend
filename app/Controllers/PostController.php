@@ -63,6 +63,7 @@ class PostController
                 p.updated_at,
 
                 u.display_name,
+                u.username,
                 u.gender,
                 u.profile_image,
 
@@ -107,13 +108,15 @@ class PostController
                 "id" => $row["creator_user_id"],
                 "display_name" => $row["display_name"],
                 "gender" => $row["gender"],
-                "profile_image" => $row["profile_image"]
+                "profile_image" => $row["profile_image"],
+                "username" => $row["username"]
             ];
 
             unset(
                 $row["display_name"],
                 $row["gender"],
-                $row["profile_image"]
+                $row["profile_image"],
+                $row["username"]
             );
 
             $row['attachments'] = [];
@@ -136,7 +139,7 @@ class PostController
     /* =====================================================
      * Get posts by user ID
      * ===================================================== */
-    public static function getPostsByUserId($username = "")
+    public static function getPostsByUsername($username = "")
     {
         $conn = Database::connect();
         $user = Auth::getUser();
@@ -154,50 +157,60 @@ class PostController
 
         $user_id = $user?->user_id ?? 0;
 
-        $sql = "
-                SELECT 
-                p.post_id,
-                p.creator_user_id,
-                p.shared_post_id,
-                p.privacy,
-                p.content,
-                p.is_archived,
-                p.is_draft,
-                p.is_deleted,
-                p.is_shared,
-                p.created_at,
-                p.updated_at,
+        $sql = "SELECT 
+    p.post_id,
+    p.creator_user_id,
+    p.shared_post_id,
+    p.privacy,
+    p.content,
+    p.is_archived,
+    p.is_draft,
+    p.is_deleted,
+    p.is_shared,
+    p.created_at,
+    p.updated_at,
 
-                cu.display_name,
-                cu.gender,
-                cu.profile_image,
+    cu.display_name,
+    cu.gender,
+    cu.profile_image,
+    cu.username,
 
-                COUNT(DISTINCT r.post_react_id) AS react_count,
-                COUNT(DISTINCT c.post_comment_id) AS comment_count,
+    IFNULL(r.react_count, 0) AS react_count,
+    IFNULL(c.comment_count, 0) AS comment_count,
 
-                CASE 
-                    WHEN COUNT(ur.post_react_id) > 0 THEN 1
-                    ELSE 0
-                END AS is_liked,
+    IF(ur.post_react_id IS NOT NULL, 1, 0) AS is_liked,
+    ur.reaction
 
-                MAX(ur.reaction) AS reaction
+FROM posts p
+JOIN users cu 
+    ON cu.user_id = p.creator_user_id
 
-                FROM posts p
-                JOIN users cu ON cu.user_id = p.creator_user_id
+-- total reactions per post
+LEFT JOIN (
+    SELECT post_id, COUNT(*) AS react_count
+    FROM post_reacts
+    GROUP BY post_id
+) r ON r.post_id = p.post_id
 
-                LEFT JOIN post_reacts r ON r.post_id = p.post_id
-                LEFT JOIN post_comments c ON c.post_id = p.post_id
+-- total comments per post
+LEFT JOIN (
+    SELECT post_id, COUNT(*) AS comment_count
+    FROM post_comments
+    GROUP BY post_id
+) c ON c.post_id = p.post_id
 
-                LEFT JOIN post_reacts ur 
-                    ON ur.post_id = p.post_id
-                AND ur.user_id = ?
+-- current user's reaction
+LEFT JOIN post_reacts ur
+    ON ur.post_id = p.post_id
+   AND ur.user_id = ?
 
-                WHERE p.is_deleted = 0
-                AND cu.username = ?
+WHERE p.is_deleted = 0
+  AND p.is_archived = 0
+  AND cu.username = ?
 
-                GROUP BY p.post_id
-                ORDER BY p.created_at DESC
-                LIMIT ? OFFSET ?
+ORDER BY p.created_at DESC
+LIMIT ? OFFSET ?;
+
     ";
 
         $stmt = $conn->prepare($sql);
@@ -213,17 +226,19 @@ class PostController
                 "id" => $row["creator_user_id"],
                 "display_name" => $row["display_name"],
                 "gender" => $row["gender"],
-                "profile_image" => $row["profile_image"]
+                "profile_image" => $row["profile_image"],
+                "username" => $row["username"]
             ];
 
             unset(
                 $row["display_name"],
                 $row["gender"],
-                $row["profile_image"]
+                $row["profile_image"],
+                $row["username"]
             );
 
             $row["attachments"] = [];
-            $posts[$row["post_id"]][] = $row;
+            $posts[$row["post_id"]] = $row;
         }
 
         self::attachAttachments($conn, $posts);
@@ -281,6 +296,7 @@ class PostController
                 u.display_name,
                 u.gender,
                 u.profile_image,
+                u.username,
 
                 COUNT(DISTINCT r.post_react_id) AS react_count,
                 COUNT(DISTINCT c.post_comment_id) AS comment_count,
@@ -331,13 +347,15 @@ class PostController
                 "id" => $row["creator_user_id"],
                 "display_name" => $row["display_name"],
                 "gender" => $row["gender"],
-                "profile_image" => $row["profile_image"]
+                "profile_image" => $row["profile_image"],
+                "username" => $row["username"]
             ];
 
             unset(
                 $row["display_name"],
                 $row["gender"],
-                $row["profile_image"]
+                $row["profile_image"],
+                $row["username"]
             );
 
             $row["attachments"] = [];
@@ -401,6 +419,7 @@ class PostController
                 u.display_name,
                 u.gender,
                 u.profile_image,
+                u.username,
 
                 COUNT(DISTINCT r.post_react_id) AS react_count,
                 COUNT(DISTINCT c.post_comment_id) AS comment_count,
@@ -462,7 +481,8 @@ class PostController
         unset(
             $post["display_name"],
             $post["gender"],
-            $post["profile_image"]
+            $post["profile_image"],
+            $post["username"]
         );
         $posts = [
             $post["post_id"] => $post
@@ -590,6 +610,7 @@ class PostController
     u.display_name,
     u.gender,
     u.profile_image,
+    u.username,
 
     COUNT(DISTINCT r.post_react_id) AS react_count,
     COUNT(DISTINCT c.post_comment_id) AS comment_count,
@@ -651,7 +672,8 @@ GROUP BY p.post_id
             unset(
                 $post["display_name"],
                 $post["gender"],
-                $post["profile_image"]
+                $post["profile_image"],
+                $post["username"]
             );
             $posts = [
                 $post["post_id"] => $post
@@ -1338,7 +1360,8 @@ GROUP BY p.post_id
                 u.user_id,
                 u.display_name,
                 u.gender,
-                u.profile_image
+                u.profile_image,
+                u.username
             FROM post_comments c
             JOIN users u ON c.user_id = u.user_id
             WHERE c.post_id = ?
@@ -1359,14 +1382,16 @@ GROUP BY p.post_id
                 "id" => $row["user_id"],
                 "display_name" => $row["display_name"],
                 "gender" => $row["gender"],
-                "profile_image" => $row["profile_image"]
+                "profile_image" => $row["profile_image"],
+                "username" => $row["username"]
             ];
 
             unset(
                 $row["user_id"],
                 $row["display_name"],
                 $row["gender"],
-                $row["profile_image"]
+                $row["profile_image"],
+                $row["username"]
             );
 
             $comments[$row["post_comment_id"]] = $row;
@@ -1406,6 +1431,7 @@ GROUP BY p.post_id
                 u.display_name,
                 u.gender,
                 u.profile_image,
+                u.username,
 
                 COUNT(DISTINCT r.post_react_id) AS react_count,
                 COUNT(DISTINCT c.post_comment_id) AS comment_count,
@@ -1444,13 +1470,15 @@ GROUP BY p.post_id
                 "id" => $row["creator_user_id"],
                 "display_name" => $row["display_name"],
                 "gender" => $row["gender"],
-                "profile_image" => $row["profile_image"]
+                "profile_image" => $row["profile_image"],
+                "username" => $row["username"]
             ];
 
             unset(
                 $row["display_name"],
                 $row["gender"],
-                $row["profile_image"]
+                $row["profile_image"],
+                $row["username"]
             );
 
             $row['attachments'] = [];
@@ -1538,7 +1566,14 @@ GROUP BY p.post_id
     {
         $conn = Database::connect();
 
-        $stmt = $conn->prepare("SELECT COUNT(DISTINCT p.post_id) AS total FROM posts p INNER JOIN users u ON u.username = ? WHERE p.is_deleted = 0 OR p.is_archived = 0");
+        $stmt = $conn->prepare("SELECT COUNT(DISTINCT p.post_id) AS total
+FROM posts p
+JOIN users u 
+    ON u.user_id = p.creator_user_id
+WHERE u.username = ?
+  AND p.is_deleted = 0
+  AND p.is_archived = 0;
+");
 
         $stmt->bind_param("s", $username);
         $stmt->execute();

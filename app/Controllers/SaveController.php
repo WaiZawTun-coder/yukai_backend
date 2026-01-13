@@ -152,7 +152,10 @@ class SaveController
     public static function createSavedLists()
     {
         $conn = Database::connect();
-        $user_id = (int) (Request::input("user_id") ?? 0);
+        // $user_id = (int) (Request::input("user_id") ?? 0);
+        $user = Auth::getUser();
+        $user_id = $user["user_id"];
+
         $name = trim(Request::input("name") ?? "");
         $sql = "INSERT INTO saved_lists (user_id, name)
                     VALUES (?, ?)";
@@ -160,10 +163,18 @@ class SaveController
         $stmt->bind_param("is", $user_id, $name);
         $stmt->execute();
         $saved_list_id = $conn->insert_id;
+
+        $sql = "SELECT * FROM saved_lists where saved_list_id=?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $saved_list_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $save_list = $result->fetch_assoc();
+
         Response::json([
             "status" => true,
             "message" => "Save List is created",
-            "data" => $saved_list_id
+            "data" => $save_list
         ]);
 
     }
@@ -177,7 +188,7 @@ class SaveController
         $saved_list_id = (int) (Request::input("saved_list_id") ?? 0);
 
         //post_id is always required
-        if ($post_id === 0 & $saved_list_id == 0) {
+        if ($post_id === 0 || $saved_list_id == 0) {
             Response::json([
                 "status" => false,
                 "message" => "Invalid post or Invalid saved list."
@@ -220,8 +231,22 @@ class SaveController
     public static function getSavedLists()
     {
         $conn = Database::connect();
-        $user = Auth::getUser();
-        $user_id = $user["user_id"];
+
+        $username = $_GET["username"];
+
+        if (!$username) {
+            $user = Auth::getUser();
+            $user_id = $user["user_id"];
+        } else {
+            $sql = "SELECT * FROM users WHERE username = ?";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("s", $username);
+            $stmt->execute();
+
+            $result = $stmt->get_result();
+            $user = $result->fetch_assoc();
+            $user_id = $user["user_id"];
+        }
 
         $sql = "Select * from saved_lists where user_id=?";
         $stmtSave = $conn->prepare($sql);
@@ -234,8 +259,8 @@ class SaveController
                 "message" => "No saved list for " . $user['username']
             ]);
         }
-
         $savedLists = [];
+
         while ($row = $result->fetch_assoc()) {
             $savedLists[] = $row;
         }
@@ -251,14 +276,21 @@ class SaveController
     }
 
     //get Save Posts
-    public static function getSavedPosts()
+    public static function getSavedPosts($list_id)
     {
         $conn = Database::connect();
-        $saved_list_id = (int) (Request::input("saved_list_id") ?? 0);
+        $saved_list_id = (int) $list_id ?? 0;
         $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
 
         $user = Auth::getUser();
         $user_id = $user["user_id"];
+
+        if ($saved_list_id == 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid List Id"
+            ], 404);
+        }
 
         $limit = 5;
         $offset = ($page - 1) * $limit;
@@ -274,6 +306,7 @@ class SaveController
                 p.is_shared,
                 p.created_at,
                 p.updated_at,
+                u.username,
                 u.display_name,
                 u.gender,
                 u.profile_image,
@@ -294,13 +327,14 @@ class SaveController
             LEFT JOIN post_reacts r ON r.post_id = p.post_id
             LEFT JOIN post_comments c ON c.post_id = p.post_id
             LEFT JOIN saved_posts sp ON sp.post_id=p.post_id
+            LEFT JOIN saved_lists sl ON sl.saved_list_id=sp.saved_list_id
 
             LEFT JOIN post_reacts ur 
              ON ur.post_id = p.post_id 
              
 
             WHERE p.is_deleted = 0
-            And sp.saved_list_id=? AND sp.user_id=?
+            AND sp.saved_list_id=? AND sl.user_id=?
 
             GROUP BY p.post_id
             ORDER BY total_engagement DESC, p.created_at DESC
@@ -317,13 +351,15 @@ class SaveController
                 "id" => $row["creator_user_id"],
                 "display_name" => $row["display_name"],
                 "gender" => $row["gender"],
-                "profile_image" => $row["profile_image"]
+                "profile_image" => $row["profile_image"],
+                "username" => $row["username"]
             ];
 
             unset(
                 $row["display_name"],
                 $row["gender"],
-                $row["profile_image"]
+                $row["profile_image"],
+                $row["username"]
             );
 
             $row['attachments'] = [];
@@ -332,7 +368,7 @@ class SaveController
 
         PostController::attachAttachments($conn, $posts);
 
-        $totalPosts = PostController::getPostCount();
+        $totalPosts = self::getSavedPostsCount($list_id);
         $totalPages = ceil($totalPosts / $limit);
 
         Response::json([
@@ -341,8 +377,21 @@ class SaveController
             "totalPages" => $totalPages,
             "data" => array_values($posts)
         ]);
+    }
 
+    private static function getSavedPostsCount($list_id)
+    {
+        $conn = Database::connect();
 
+        $sql = "SELECT COUNT(*) AS total FROM saved_posts where saved_list_id=?";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $list_id);
+        $stmt->execute();
+
+        $result = $stmt->get_result();
+
+        return (int) $result->fetch_assoc()["total"];
     }
 
 }
