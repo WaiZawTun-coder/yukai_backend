@@ -1,10 +1,15 @@
 <?php
+
 use App\Controllers\AuthController;
-use App\Controllers\PostController;
 use App\Controllers\FriendController;
+use App\Controllers\PostController;
 use App\Controllers\UserController;
 use App\Controllers\SaveController;
+<<<<<<< HEAD
 use App\Controllers\ChattingController;
+=======
+use App\Controllers\SearchController;
+>>>>>>> d72e806ee27939af4ffeb0161c1a29a8107c1862
 use App\Core\Auth;
 
 // public routes
@@ -36,7 +41,7 @@ Router::add("GET", "/api/profile", function () {
 }, true);
 
 
-// posts
+// // posts
 Router::add("GET", "/api/get-posts", function () {
     PostController::getPosts();
 }, true); // get all posts
@@ -62,11 +67,11 @@ Router::add("POST", "/api/create-post", function () {
 }, true); // create post
 
 Router::add("GET", "/api/edit-post", function () {
-PostController::editPost();
+    PostController::editPost();
 }, true); // edit post
 
 Router::add("GET", "/api/edit-post-privacy", function () {
-PostController::editPostPrivacy();
+    PostController::editPostPrivacy();
 }, true); // edit post by privacy
 
 Router::add("POST", "/api/react-post", function () {
@@ -75,11 +80,16 @@ Router::add("POST", "/api/react-post", function () {
 
 Router::add("POST", "/api/comment-post", function () {
     PostController::commentPost();
+<<<<<<< HEAD
 
 }, false); // insert comment
 // Router::add("GET", "/api/get-postAll", function () {
 //     PostController::getPosts();
 // }, false); // retrun all posts
+=======
+}, true); // insert comment
+
+>>>>>>> d72e806ee27939af4ffeb0161c1a29a8107c1862
 
 Router::add("DELETE", "/api/delete-comment", function () {
     PostController::commentDelete();
@@ -92,6 +102,28 @@ Router::add("GET", "/api/get-comment/{post_id}", function ($post_id) {
 Router::add("DELETE", "/api/delete-post", function () {
     PostController::postDelete();
 }, true); // delete post
+<<<<<<< HEAD
+=======
+
+Router::add("GET", "/api/get-friends", function () {
+    FriendController::getFriends();
+}, true);
+Router::add("POST", "/api/send-request", function () {
+    FriendController::sendFriendRequest();
+}, true);//send friend requent
+Router::add("POST", "/api/response-request", function () {
+    FriendController::responseFriendRequest();
+}, true);//accept,reject,cancel friend request
+Router::add("GET", "/api/get-sent-requests", function () {
+    FriendController::getFriendRequest();
+}, true);//get Friend Request
+Router::add("GET", "/api/get-received-requests", function () {
+    FriendController::getReceivedRequests();
+}, true);
+Router::add("GET", "/api/get-people-you-may-know", function () {
+    FriendController::peopleYouMayKnow();
+}, protected: true);
+>>>>>>> d72e806ee27939af4ffeb0161c1a29a8107c1862
 
 
 Router::add("POST", "/api/save-post", function () {
@@ -155,13 +187,14 @@ Router::add("GET","/api/get-people-you-may-know", function(){
 
 //passwords
 Router::add("POST", "/auth/forget-password", function () {
-AuthController::forgetPassword();
+    AuthController::forgetPassword();
 }, true); // forget password
 
 Router::add("POST", "/auth/reset-password", function () {
-AuthController::resetPassword();
+    AuthController::resetPassword();
 }, true); // reset password
 
+<<<<<<< HEAD
 //followers
 Router::add("POST","/api/follow", function(){
     FriendController::followUser();
@@ -180,4 +213,9 @@ Router::add("POST","/api/unfriend",function(){
 },false);
 
 
+=======
+Router::add("POST", "/api/search", function () {
+    SearchController::search();
+}, true); // search 
+>>>>>>> d72e806ee27939af4ffeb0161c1a29a8107c1862
 
