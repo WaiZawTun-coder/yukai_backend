@@ -142,7 +142,7 @@ Router::add("GET", "/api/delete-saved-posts", function () {
 }, true); // delete saved posts
 
 // Router::add("POST", "/auth/generateOTP", function () {
-// AuthController::generateOTP();
+//     AuthController::generateOTP();
 // }, true); // generate otp 
 
 // Router::add("POST", "/auth/verifyOTP", function () {
@@ -155,11 +155,11 @@ Router::add("GET", "/api/delete-saved-posts", function () {
 
 Router::add("POST", "/auth/forget-password", function () {
     AuthController::forgetPassword();
-}, true); // forget password
+}, false); // forget password
 
 Router::add("POST", "/auth/reset-password", function () {
     AuthController::resetPassword();
-}, true); // reset password
+}, false); // reset password
 
 Router::add("POST", "/api/search", function () {
     SearchController::search();
