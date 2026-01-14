@@ -5,11 +5,11 @@ use App\Controllers\FriendController;
 use App\Controllers\PostController;
 use App\Controllers\UserController;
 use App\Controllers\SaveController;
-<<<<<<< HEAD
+
 use App\Controllers\ChattingController;
-=======
+
 use App\Controllers\SearchController;
->>>>>>> d72e806ee27939af4ffeb0161c1a29a8107c1862
+
 use App\Core\Auth;
 
 // public routes
@@ -80,16 +80,17 @@ Router::add("POST", "/api/react-post", function () {
 
 Router::add("POST", "/api/comment-post", function () {
     PostController::commentPost();
-<<<<<<< HEAD
+
 
 }, false); // insert comment
 // Router::add("GET", "/api/get-postAll", function () {
 //     PostController::getPosts();
 // }, false); // retrun all posts
-=======
-}, true); // insert comment
 
->>>>>>> d72e806ee27939af4ffeb0161c1a29a8107c1862
+
+
+
+
 
 Router::add("DELETE", "/api/delete-comment", function () {
     PostController::commentDelete();
@@ -102,8 +103,7 @@ Router::add("GET", "/api/get-comment/{post_id}", function ($post_id) {
 Router::add("DELETE", "/api/delete-post", function () {
     PostController::postDelete();
 }, true); // delete post
-<<<<<<< HEAD
-=======
+
 
 Router::add("GET", "/api/get-friends", function () {
     FriendController::getFriends();
@@ -123,7 +123,7 @@ Router::add("GET", "/api/get-received-requests", function () {
 Router::add("GET", "/api/get-people-you-may-know", function () {
     FriendController::peopleYouMayKnow();
 }, protected: true);
->>>>>>> d72e806ee27939af4ffeb0161c1a29a8107c1862
+
 
 
 Router::add("POST", "/api/save-post", function () {
@@ -194,7 +194,7 @@ Router::add("POST", "/auth/reset-password", function () {
     AuthController::resetPassword();
 }, true); // reset password
 
-<<<<<<< HEAD
+
 //followers
 Router::add("POST","/api/follow", function(){
     FriendController::followUser();
@@ -213,9 +213,12 @@ Router::add("POST","/api/unfriend",function(){
 },false);
 
 
-=======
+
 Router::add("POST", "/api/search", function () {
     SearchController::search();
 }, true); // search 
->>>>>>> d72e806ee27939af4ffeb0161c1a29a8107c1862
+//chatting
+Router::add("POST", "/api/Chatting", function () {
+    ChattingController::privateChat();
+}, false); 
 

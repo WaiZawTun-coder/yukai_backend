@@ -472,7 +472,7 @@ class FriendController
         $follower_id=(int)($input['follower_id']?? 0); // login user
         $following_id=(int)($input['following_id']?? 0);
 
-<<<<<<< HEAD
+
         if( $follower_id===0 || $following_id===0 || $follower_id==$following_id ){
             Response::json([
                 "status"=>false,
@@ -625,7 +625,7 @@ class FriendController
         
         
     }
-=======
+
 
     private static function getPageParams()
     {
@@ -668,6 +668,6 @@ class FriendController
         $followStmt->execute();
     }
 
->>>>>>> d72e806ee27939af4ffeb0161c1a29a8107c1862
+
 
 }
