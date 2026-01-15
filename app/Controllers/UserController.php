@@ -149,7 +149,7 @@ WHERE u.username = ?
         $profile_image = trim(Request::input("profile_image") ?? "");
         $cover_image = trim(Request::input("cover_image") ?? "");
         $phone_number = trim(Request::input("phone_number") ?? "");
-        $deleted_account = (int)(Request::input("deleted_account") ?? 0);
+        
 
         // Check user exists
         $sql = "SELECT * FROM users WHERE user_id = ?";

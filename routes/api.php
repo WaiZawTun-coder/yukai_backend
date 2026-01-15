@@ -3,6 +3,7 @@
 use App\Controllers\AuthController;
 use App\Controllers\FriendController;
 use App\Controllers\PostController;
+use App\Controllers\PostHidingController;
 use App\Controllers\UserController;
 use App\Controllers\SaveController;
 use App\Controllers\SearchController;
@@ -184,4 +185,21 @@ UserController::deactivateUser();
 Router::add("POST", "/api/deleted-account", function () {
 UserController::deletedAccount();
 }, true); // deleted account
+
+Router::add("POST", "/api/hide-post", function () {
+PostHidingController::hidePost();
+}, true); // hide post
+
+Router::add("POST", "/api/unhide-post", function () {
+PostHidingController::unhidePost();
+}, true); // unhide post
+
+Router::add("POST", "/api/edit-history", function () {
+PostController::editHistory();
+}, false); // edit post history
+
+Router::add("GET", "/api/get-edit-history", function () {
+PostController::getEditHistory();
+}, true); // get edit post history
+
 
