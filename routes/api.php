@@ -1,6 +1,7 @@
 <?php
 
 use App\Controllers\AuthController;
+use App\Controllers\DeviceController;
 use App\Controllers\FriendController;
 use App\Controllers\PostController;
 use App\Controllers\UserController;
@@ -127,7 +128,7 @@ Router::add("GET", "/api/get-people-you-may-know", function () {
 
 
 Router::add("POST", "/api/save-post", function () {
-SaveController::savePost();
+    SaveController::savePost();
 }, true); // save post
 
 Router::add("POST", "/api/create-saved-list", function () {
@@ -153,24 +154,24 @@ Router::add("GET", "/api/update-saved-posts", function () {
 
 Router::add("GET", "/api/delete-saved-posts", function () {
     SaveController::deleteSavedPosts();
-}, true); 
+}, true);
 
 //friends
-Router::add("POST","/api/send-request", function(){
+Router::add("POST", "/api/send-request", function () {
     FriendController::sendFriendRequest();
 }, true);//send friend requent
-Router::add("POST","/api/response-request", function(){
+Router::add("POST", "/api/response-request", function () {
     FriendController::responseFriendRequest();
-},true);//accept,reject,cancel friend request
-Router::add("GET","/api/get-sent-requests",function(){
+}, true);//accept,reject,cancel friend request
+Router::add("GET", "/api/get-sent-requests", function () {
     FriendController::getFriendRequest();
-},true);//get Friend Request
-Router::add("GET","/api/get-received-requests",function(){
+}, true);//get Friend Request
+Router::add("GET", "/api/get-received-requests", function () {
     FriendController::getReceivedRequests();
-},true);
-Router::add("GET","/api/get-people-you-may-know", function(){
+}, true);
+Router::add("GET", "/api/get-people-you-may-know", function () {
     FriendController::peopleYouMayKnow();
-},true);
+}, true);
 // delete saved posts
 
 // Router::add("POST", "/auth/generateOTP", function () {
@@ -196,29 +197,92 @@ Router::add("POST", "/auth/reset-password", function () {
 
 
 //followers
-Router::add("POST","/api/follow", function(){
+Router::add("POST", "/api/follow", function () {
     FriendController::followUser();
-},false);
-Router::add("POST","/api/unfollow", function(){
+}, false);
+Router::add("POST", "/api/unfollow", function () {
     FriendController::unfollowUser();
-},false);
-Router::add("POST","/api/block-user", function(){
+}, false);
+Router::add("POST", "/api/block-user", function () {
     FriendController::blockUser();
-},false);
-Router::add("POST","/api/unblock",function(){
+}, false);
+Router::add("POST", "/api/unblock", function () {
     FriendController::unblockUser();
-},false);
-Router::add("POST","/api/unfriend",function(){
+}, false);
+Router::add("POST", "/api/unfriend", function () {
     FriendController::unfriend();
-},false);
+}, false);
 
 
 
 Router::add("POST", "/api/search", function () {
     SearchController::search();
 }, true); // search 
-//chatting
-Router::add("POST", "/api/Chatting", function () {
-    ChattingController::privateChat();
-}, false); 
 
+
+// get chats
+Router::add("GET", "/api/chats", function () {
+    ChatController::getMyChats();
+}, true);
+
+Router::add("GET", "/api/chat", function () {
+    ChatController::getChat();
+}, true);
+
+// create private chat
+Router::add("POST", "/api/chats/private", function () {
+    ChatController::createPrivateChat();
+}, true);
+
+// create group chat
+Router::add("POST", "/api/chats/group", function () {
+    ChatController::createGroupChat();
+}, true);
+
+// get chat participants
+Router::add("GET", "/api/chats/participants", function () {
+    ChatController::getParticipants();
+}, true);
+
+// leave Chat
+Router::add("POST", "/api/chats/leave", function () {
+    ChatController::leaveChat();
+}, true);
+
+// delete Chat
+Router::add("POST", "/api/chats/delete", function () {
+    ChatController::deleteChat();
+}, true);
+
+// messages
+Router::add("POST", "/api/chat/get-messages", function () {
+    MessageController::getMessages();
+}, true);
+
+// send message
+Router::add("POST", "/api/chat/send-message", function () {
+    MessageController::sendMessage();
+}, true);
+
+// edit message
+Router::add("POST", "/api/chat/edit-message", function () {
+    MessageController::editMessage();
+}, true);
+
+// delete message
+Router::add("POST", "/api/chat/delete-message", function () {
+    MessageController::deleteMessage();
+}, true);
+
+// update receipt
+Router::add("POST", "/api/chat/update-receipt", function () {
+    MessageController::updateReceipt();
+}, true);
+
+Router::add("POST", "/api/register-device", function () {
+    DeviceController::registerDevice();
+}, true);
+
+Router::add("GET", "/api/get-public-keys", function () {
+    DeviceController::getPublicKeys();
+}, true);
