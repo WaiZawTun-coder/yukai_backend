@@ -3,6 +3,7 @@
 use App\Controllers\AuthController;
 use App\Controllers\FriendController;
 use App\Controllers\PostController;
+use App\Controllers\PostHidingController;
 use App\Controllers\UserController;
 use App\Controllers\SaveController;
 
@@ -15,7 +16,7 @@ use App\Core\Auth;
 // public routes
 Router::add("GET", "/", function () {
     echo json_encode(["status" => true, "message" => "success"]);
-}, true);
+}, false);
 Router::add("POST", "/auth/login", function () {
     AuthController::login();
 }, false);
@@ -221,4 +222,41 @@ Router::add("POST", "/api/search", function () {
 Router::add("POST", "/api/Chatting", function () {
     ChattingController::privateChat();
 }, false); 
+
+Router::add("POST", "/api/edit-user", function () {
+UserController::editUser();
+}, true); // edit user
+
+Router::add("POST", "/api/request-password-otp", function () {
+UserController::requestPasswordOTP();
+}, true); // request password otp
+
+Router::add("POST", "/api/change-password", function () {
+UserController::changepassword();
+}, true); // change password
+
+Router::add("POST", "/api/deactivate-user", function () {
+UserController::deactivateUser();
+}, true); // deactivate user
+
+Router::add("POST", "/api/deleted-account", function () {
+UserController::deletedAccount();
+}, true); // deleted account
+
+Router::add("POST", "/api/hide-post", function () {
+PostHidingController::hidePost();
+}, true); // hide post
+
+Router::add("POST", "/api/unhide-post", function () {
+PostHidingController::unhidePost();
+}, true); // unhide post
+
+Router::add("POST", "/api/edit-history", function () {
+PostController::editHistory();
+}, false); // edit post history
+
+Router::add("GET", "/api/get-edit-history", function () {
+PostController::getEditHistory();
+}, true); // get edit post history
+
 
