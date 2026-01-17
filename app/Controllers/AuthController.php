@@ -703,4 +703,8 @@ class AuthController
     {
         echo json_encode(["message" => "profile"]);
     }
+    
+    public static function twoFactorAuthentication(){
+        
+    }
 }
