@@ -1,0 +1,489 @@
+<?php
+
+use App\Core\Auth;
+use App\Core\Database;
+use App\Core\Request;
+use App\Core\Response;
+
+class ChatController
+{
+    /* ============================
+        GET MY CHAT LIST
+       ============================ */
+    public static function getMyChats()
+    {
+        $conn = Database::connect();
+        $user = Auth::getUser();
+        $user_id = (int) $user["user_id"];
+        $device_id = $_GET["device_id"] ?? null;
+
+        if (!$device_id) {
+            Response::json(["status" => false, "message" => "device_id required"], 400);
+            return;
+        }
+
+        // Fetch chats with last message and unread count
+        $sql = "
+               SELECT 
+                   c.chat_id,
+                   c.type,
+                   c.created_at,
+                   m.message_id AS last_message_id,
+                   mp.cipher_text AS last_message,
+                   m.message_type AS last_message_type,
+                   mp.iv AS last_message_iv,
+                   m.sent_at AS last_message_time,
+                   m.sender_user_id AS last_message_sender_id,
+                   mp.status AS last_message_status,
+                   last_sender.display_name AS last_sender_name,
+                   (
+                       SELECT COUNT(*)
+                       FROM messages um
+                       JOIN message_payloads ump
+                         ON ump.message_id = um.message_id
+                        AND ump.recipient_user_id = ?
+                        AND ump.recipient_device_id = ?
+                       WHERE um.chat_id = c.chat_id
+                         AND um.sender_user_id != ?
+                         AND um.is_deleted = 0
+                         AND ump.status != 'seen'
+                   ) AS unread_count
+               FROM chat_participants cp
+               JOIN chats c ON c.chat_id = cp.chat_id
+               LEFT JOIN messages m
+                 ON m.message_id = (
+                     SELECT m2.message_id
+                     FROM messages m2
+                     WHERE m2.chat_id = c.chat_id
+                       AND m2.is_deleted = 0
+                     ORDER BY m2.sent_at DESC
+                     LIMIT 1
+                 )
+               LEFT JOIN message_payloads mp
+                 ON mp.message_id = m.message_id
+                AND mp.recipient_user_id = ?
+                AND mp.recipient_device_id = ?
+               LEFT JOIN users last_sender
+                 ON last_sender.user_id = m.sender_user_id
+               WHERE cp.user_id = ?
+               ORDER BY m.sent_at DESC, c.created_at DESC
+           ";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param(
+            "isiisi",
+            $user_id,     // unread_count recipient_user_id
+            $device_id,   // unread_count recipient_device_id
+            $user_id,     // unread_count sender_user_id !=
+            $user_id,     // mp.recipient_user_id
+            $device_id,   // mp.recipient_device_id
+            $user_id      // cp.user_id
+        );
+
+        $stmt->execute();
+        $res = $stmt->get_result();
+
+        $chats = [];
+        $chat_ids = [];
+
+        while ($row = $res->fetch_assoc()) {
+            $chat_id = $row["chat_id"];
+            $chats[$chat_id] = $row;
+            $chat_ids[] = $chat_id;
+            $chats[$chat_id]["participants"] = []; // initialize participants array
+        }
+
+        // Fetch participants excluding current user
+        if (!empty($chat_ids)) {
+            $ids_placeholders = implode(',', array_fill(0, count($chat_ids), '?'));
+            $types = str_repeat('i', count($chat_ids)) . 'i'; // extra 'i' for current user exclusion
+            $params = array_merge($chat_ids, [$user_id]);
+
+            $sql2 = "
+                   SELECT cp.chat_id, u.user_id, u.display_name, u.profile_image, u.gender
+                   FROM chat_participants cp
+                   JOIN users u ON u.user_id = cp.user_id
+                   WHERE cp.chat_id IN ($ids_placeholders)
+                     AND cp.user_id != ?
+               ";
+
+            $stmt2 = $conn->prepare($sql2);
+            $stmt2->bind_param($types, ...$params);
+            $stmt2->execute();
+            $res2 = $stmt2->get_result();
+
+            while ($p = $res2->fetch_assoc()) {
+                $chats[$p["chat_id"]]["participants"][] = [
+                    "user_id" => $p["user_id"],
+                    "display_name" => $p["display_name"],
+                    "profile_image" => $p["profile_image"],
+                    "gender" => $p["gender"]
+                ];
+            }
+        }
+
+        Response::json([
+            "status" => true,
+            "data" => array_values($chats)
+        ]);
+    }
+
+
+
+    /* ============================
+        GET PRIVATE CHAT
+       ============================ */
+    public static function getChat()
+    {
+        $conn = Database::connect();
+        $user = Auth::getUser();
+        $me = (int) $user["user_id"];
+        $chat_id = (int) ($_GET["chat_id"] ?? 0);
+        $device_id = $_GET["device_id"] ?? '';
+
+        if (!$chat_id) {
+            Response::json(["status" => false, "message" => "Invalid chat_id"], 404);
+            return;
+        }
+
+        // Check if current user is a participant
+        $check = $conn->prepare("
+               SELECT 1 
+               FROM chat_participants 
+               WHERE chat_id = ? AND user_id = ? 
+               LIMIT 1
+           ");
+        $check->bind_param("ii", $chat_id, $me);
+        $check->execute();
+        if (!$check->get_result()->fetch_row()) {
+            Response::json(["status" => false, "message" => "Access denied"], 403);
+            return;
+        }
+
+        $sql = "
+           SELECT 
+               c.chat_id,
+               c.type,
+               c.created_at,
+       
+               -- Private chat: other participant
+               u.user_id AS other_user_id,
+               u.username AS other_username,
+               u.display_name AS other_display_name,
+               u.profile_image AS other_profile_image,
+               u.gender AS other_gender,
+       
+               -- Group member count
+               (SELECT COUNT(*) 
+                FROM chat_participants p 
+                WHERE p.chat_id = c.chat_id
+               ) AS member_count,
+       
+               -- Last message info
+               m.message_id AS last_message_id,
+               mp.cipher_text AS last_message,
+               m.message_type AS last_message_type,
+               m.sent_at AS last_message_time,
+               m.sender_user_id AS last_message_sender_id,
+               mp.status AS last_message_status,
+       
+               -- Last sender name
+               last_sender.display_name AS last_sender_name,
+       
+               -- Unread messages count for this user/device
+               (
+                   SELECT COUNT(*)
+                   FROM messages um
+                   JOIN message_payloads ump ON ump.message_id = um.message_id
+                   WHERE um.chat_id = c.chat_id
+                     AND um.sender_user_id != ?
+                     AND ump.recipient_user_id = ?
+                     AND ump.status != 'seen'
+                     AND um.is_deleted = 0
+               ) AS unread_count
+       
+           FROM chats c
+       
+           JOIN chat_participants cp 
+             ON cp.chat_id = c.chat_id 
+            AND cp.user_id = ?
+       
+           LEFT JOIN chat_participants cp2
+             ON cp2.chat_id = c.chat_id
+            AND cp2.user_id != cp.user_id
+            AND c.type = 'private'
+       
+           LEFT JOIN users u 
+             ON u.user_id = cp2.user_id
+       
+           LEFT JOIN messages m 
+             ON m.message_id = (
+                 SELECT m2.message_id 
+                 FROM messages m2
+                 WHERE m2.chat_id = c.chat_id
+                   AND m2.is_deleted = 0
+                 ORDER BY m2.sent_at DESC
+                 LIMIT 1
+             )
+       
+           LEFT JOIN message_payloads mp
+             ON mp.message_id = m.message_id
+            AND mp.recipient_user_id = ?
+            AND mp.recipient_device_id = ?
+       
+           LEFT JOIN users last_sender 
+             ON last_sender.user_id = m.sender_user_id
+       
+           WHERE c.chat_id = ?
+           LIMIT 1
+           ";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("iiissi", $me, $me, $me, $me, $device_id, $chat_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        if ($chat = $result->fetch_assoc()) {
+            Response::json(["status" => true, "data" => $chat]);
+        } else {
+            Response::json(["status" => false, "message" => "Chat not found"], 404);
+        }
+    }
+
+
+    /* ============================
+        CREATE OR GET PRIVATE CHAT
+       ============================ */
+    public static function createPrivateChat()
+    {
+        mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+        $conn = Database::connect();
+        $user = Auth::getUser();
+        $me = (int) $user["user_id"];
+        $target_id = (int) Request::input("target_user_id");
+
+        if (!$target_id || $target_id == $me) {
+            Response::json(["status" => false, "message" => "Invalid target user"], 400);
+            return;
+        }
+
+        // Check existing chat
+        $checkSql = "
+            SELECT c.chat_id
+            FROM chats c
+            JOIN chat_participants a ON a.chat_id = c.chat_id
+            JOIN chat_participants b ON b.chat_id = c.chat_id
+            WHERE c.type = 'private'
+              AND a.user_id = ?
+              AND b.user_id = ?
+            LIMIT 1
+        ";
+
+        $stmt = $conn->prepare($checkSql);
+        $stmt->bind_param("ii", $me, $target_id);
+        $stmt->execute();
+        $existing = $stmt->get_result()->fetch_assoc();
+
+        if ($existing) {
+            Response::json(["status" => true, "chat_id" => $existing["chat_id"], "is_new" => false]);
+            return;
+        }
+
+        $conn->begin_transaction();
+        try {
+            $stmt = $conn->prepare("INSERT INTO chats (type, created_by_user_id) VALUES ('private', ?)");
+            $stmt->bind_param("i", $me);
+            $stmt->execute();
+            $chat_id = $stmt->insert_id;
+
+            $stmt = $conn->prepare("INSERT INTO chat_participants (chat_id, user_id, encrypted_key) VALUES (?, ?, '')");
+            $stmt->bind_param("ii", $chat_id, $me);
+            $stmt->execute();
+            $stmt->bind_param("ii", $chat_id, $target_id);
+            $stmt->execute();
+
+            $conn->commit();
+
+            Response::json(["status" => true, "chat_id" => $chat_id, "is_new" => true]);
+        } catch (mysqli_sql_exception $e) {
+            $conn->rollback();
+            Response::json(["status" => false, "message" => "Failed to create chat", "error" => $e->getMessage()], 500);
+        }
+    }
+
+    /* ============================
+        CREATE GROUP CHAT
+       ============================ */
+    public static function createGroupChat()
+    {
+        mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+        $conn = Database::connect();
+        $user = Auth::getUser();
+        $me = (int) $user["user_id"];
+
+        $members = Request::input("members");
+        if (!is_array($members) || count($members) == 0) {
+            Response::json(["status" => false, "message" => "Members required"], 400);
+            return;
+        }
+
+        $conn->begin_transaction();
+        try {
+            $stmt = $conn->prepare("INSERT INTO chats (type, created_by_user_id) VALUES ('group', ?)");
+            $stmt->bind_param("i", $me);
+            $stmt->execute();
+            $chat_id = $stmt->insert_id;
+
+            $insert = $conn->prepare("INSERT INTO chat_participants (chat_id, user_id, encrypted_key) VALUES (?, ?, '')");
+            $insert->bind_param("ii", $chat_id, $me);
+            $insert->execute();
+
+            foreach ($members as $uid) {
+                $uid = (int) $uid;
+                if ($uid == $me)
+                    continue;
+                $insert->bind_param("ii", $chat_id, $uid);
+                $insert->execute();
+            }
+
+            $conn->commit();
+            Response::json(["status" => true, "chat_id" => $chat_id]);
+        } catch (mysqli_sql_exception $e) {
+            $conn->rollback();
+            Response::json(["status" => false, "message" => "Failed to create group", "error" => $e->getMessage()], 500);
+        }
+    }
+
+    /* ============================
+        GET CHAT PARTICIPANTS
+       ============================ */
+    public static function getParticipants()
+    {
+        $conn = Database::connect();
+        $user = Auth::getUser();
+        $me = (int) $user["user_id"];
+        $chat_id = (int) ($_GET["chat_id"] ?? 0);
+        $device_id = $_GET["device_id"] ?? null;
+
+        if (!$chat_id || !$device_id) {
+            Response::json([
+                "status" => false,
+                "message" => "chat_id and device_id required"
+            ], 400);
+            return;
+        }
+
+        $check = $conn->prepare("SELECT 1 FROM chat_participants WHERE chat_id = ? AND user_id = ?");
+        $check->bind_param("ii", $chat_id, $me);
+        $check->execute();
+        if (!$check->get_result()->num_rows) {
+            Response::json(["status" => false, "message" => "Access denied"], 403);
+            return;
+        }
+
+        $sql = "
+           SELECT 
+               u.user_id,
+               u.username,
+               u.display_name,
+               u.profile_image,
+               cp.joined_at,
+               d.device_id,
+               d.identity_key_pub,
+               d.signed_prekey_pub,
+               d.signed_prekey_sig,
+               d.signed_prekey_id,
+               d.registration_id
+           FROM chat_participants cp
+           JOIN users u ON u.user_id = cp.user_id
+           LEFT JOIN devices d 
+             ON d.user_id = u.user_id 
+            AND d.is_active = 1
+           WHERE cp.chat_id = ? AND cp.user_id != ?
+       ";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("ii", $chat_id, $me);
+        $stmt->execute();
+        $res = $stmt->get_result();
+
+        $participants = [];
+        while ($row = $res->fetch_assoc()) {
+            $uid = $row["user_id"];
+            if (!isset($participants[$uid])) {
+                $participants[$uid] = [
+                    "user_id" => $row["user_id"],
+                    "username" => $row["username"],
+                    "display_name" => $row["display_name"],
+                    "profile_image" => $row["profile_image"],
+                    "joined_at" => $row["joined_at"],
+                    "devices" => []
+                ];
+            }
+
+            if ($row["device_id"]) {
+                $participants[$uid]["devices"][] = [
+                    "device_id" => $row["device_id"],
+                    "identity_key_pub" => $row["identity_key_pub"] ? base64_encode($row["identity_key_pub"]) : null,
+                    "signed_prekey_pub" => $row["signed_prekey_pub"] ? base64_encode($row["signed_prekey_pub"]) : null,
+                    "signed_prekey_sig" => $row["signed_prekey_sig"] ? base64_encode($row["signed_prekey_sig"]) : null,
+                    "signed_prekey_id" => $row["signed_prekey_id"],
+                    "registration_id" => $row["registration_id"]
+                ];
+            }
+        }
+
+        Response::json([
+            "status" => true,
+            "data" => array_values($participants)
+        ]);
+    }
+
+    /* ============================
+        LEAVE CHAT
+       ============================ */
+    public static function leaveChat()
+    {
+        $conn = Database::connect();
+        $user = Auth::getUser();
+        $me = (int) $user["user_id"];
+        $chat_id = (int) Request::input("chat_id");
+
+        $stmt = $conn->prepare("DELETE FROM chat_participants WHERE chat_id = ? AND user_id = ?");
+        $stmt->bind_param("ii", $chat_id, $me);
+        $stmt->execute();
+
+        if ($stmt->affected_rows === 0) {
+            Response::json(["status" => false, "message" => "Chat not found or already left"], 404);
+            return;
+        }
+
+        Response::json(["status" => true]);
+    }
+
+    /* ============================
+        DELETE CHAT (OWNER ONLY)
+       ============================ */
+    public static function deleteChat()
+    {
+        $conn = Database::connect();
+        $user = Auth::getUser();
+        $me = (int) $user["user_id"];
+        $chat_id = (int) Request::input("chat_id");
+
+        $check = $conn->prepare("SELECT chat_id FROM chats WHERE chat_id = ? AND created_by_user_id = ?");
+        $check->bind_param("ii", $chat_id, $me);
+        $check->execute();
+
+        if (!$check->get_result()->num_rows) {
+            Response::json(["status" => false, "message" => "Only owner can delete chat"], 403);
+            return;
+        }
+
+        $stmt = $conn->prepare("DELETE FROM chats WHERE chat_id = ?");
+        $stmt->bind_param("i", $chat_id);
+        $stmt->execute();
+
+        Response::json(["status" => true]);
+    }
+}
