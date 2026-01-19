@@ -705,6 +705,9 @@ class AuthController
     }
     
     public static function twoFactorAuthentication(){
+        $conn=Database::connect();
+        $input=Request::json();
+
         
     }
 }
