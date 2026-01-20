@@ -221,4 +221,7 @@ Router::add("POST", "/api/search", function () {
 Router::add("POST", "/api/Chatting", function () {
     ChattingController::privateChat();
 }, false); 
+Router::add("POST","api/auth/2factors",function(){
+    AuthController::twoFactorAuthentication();
+},false);
 

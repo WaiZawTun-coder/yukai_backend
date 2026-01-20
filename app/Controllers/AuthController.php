@@ -707,6 +707,34 @@ class AuthController
     public static function twoFactorAuthentication(){
         $conn=Database::connect();
         $input=Request::json();
+        $user_id=(int)($input['user_id']?? 0);
+        $otpcode=trim($input['otp_code']?? "");
+        if(!$user_id || $otpcode===""){
+            Response::json([
+                "status"=>false,
+                "message"=>"user_id and otp code is required"
+            ]);
+        }
+        if(!self::verifyOTP($user_id,$otpcode)){
+            Response::json([
+                "status"=>false,
+                "message"=>"Invalid input"
+            ]);
+        }
+        $stmt = $conn->prepare("SELECT * FROM users WHERE user_id = ?");
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $user = $stmt->get_result()->fetch_assoc();
+
+        if (!$user) {
+           Response::json([
+              "status" => false,
+              "message" => "User not found"
+        ], 404);
+    }
+
+    // OTP verified → issue tokens
+    // self::issueTokens($user);
 
         
     }
