@@ -94,14 +94,6 @@ class AuthController
 
         $user = $result->fetch_assoc();
 
-        // BLOCK INCOMPLETE REGISTRATION
-        if ((int) $user['completed_step'] < 2) {
-            Response::json([
-                "status" => false,
-                "message" => "Registration not completed"
-            ], 403);
-        }
-
         if ((int) $user['is_active'] === 0) {
             Response::json([
                 "status" => false,
@@ -143,6 +135,22 @@ class AuthController
             "samesite" => $isSecure ? "None" : "Lax"
         ]);
 
+        // BLOCK INCOMPLETE REGISTRATION
+        if ((int) $user['completed_step'] < 2) {
+            Response::json([
+                "status" => true,
+                "incomplete" => true,
+                "message" => "Registration not completed",
+                "data" => [
+                    "user_id" => $user["user_id"],
+                    "username" => $user["username"],
+                    "email" => $user["email"],
+                    "completed_step" => $user["completed_step"],
+                    "access_token" => $accessToken
+                ]
+            ]);
+        }
+
         Response::json([
             "status" => true,
             "message" => "Login successful",
@@ -159,7 +167,8 @@ class AuthController
                 "location" => $user["location"],
                 "is_active" => $user["is_active"],
                 "last_seen" => $user["last_seen"],
-                "access_token" => $accessToken
+                "access_token" => $accessToken,
+                "completed_step" => $user["completed_step"]
             ]
         ]);
     }
@@ -475,13 +484,13 @@ class AuthController
     public static function generateOTP($user_id)
     {
         $conn = Database::connect();
-       
+
 
         $otpcode = '';
         for ($i = 0; $i < 8; $i++) {
             $otpcode .= random_int(0, 9);
         }
-        $expiryMinutes=5;
+        $expiryMinutes = 5;
 
         $hashedOtp = password_hash($otpcode, PASSWORD_DEFAULT);
 
@@ -519,10 +528,10 @@ class AuthController
 
 
     // Verify OTP
-    public static function verifyOTP($user_id,$otpcode)
+    public static function verifyOTP($user_id, $otpcode)
     {
         $conn = Database::connect();
-       
+
 
         // Get valid OTPs for this user
         $stmt = $conn->prepare("
@@ -567,12 +576,11 @@ class AuthController
         //     'message' => 'OTP verified successfully'
         // ]);
         return true;
-        
+
     }
 
-    public static function sendEmail($email,$otpcode) {
-        
-       
+    public static function sendEmail($email, $otpcode)
+    {
         $subject = "Password Rest OTP";
         $body = "Hello,
 
@@ -595,12 +603,12 @@ class AuthController
 
         try {
             $mail->isSMTP();
-            $mail->Host       = 'smtp.gmail.com';
-            $mail->SMTPAuth   = true;
-            $mail->Username   = $_ENV['GMAIL_USERNAME'];
-            $mail->Password   = $_ENV['GMAIL_APP_PASSWORD'];
+            $mail->Host = 'smtp.gmail.com';
+            $mail->SMTPAuth = true;
+            $mail->Username = $_ENV['GMAIL_USERNAME'];
+            $mail->Password = $_ENV['GMAIL_APP_PASSWORD'];
             $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-            $mail->Port       = 587;
+            $mail->Port = 587;
 
             $mail->CharSet = 'UTF-8';
 
@@ -609,7 +617,7 @@ class AuthController
 
             $mail->isHTML(false);
             $mail->Subject = $subject;
-            $mail->Body    = $body;
+            $mail->Body = $body;
 
             $mail->send();
             return true;
@@ -625,66 +633,73 @@ class AuthController
                 "error" => $mail->ErrorInfo
             ], 500);
         }
-        
+
     }
 
     //forget password function
 
-    public static function forgetPassword(){
-    $conn = Database::connect();
-    $email = trim(Request::input("email") ?? "");
+    public static function forgetPassword()
+    {
+        $conn = Database::connect();
+        $email = trim(Request::input("email") ?? "");
 
-    if ($email === "") {
+        if ($email === "") {
+            Response::json([
+                "status" => false,
+                "message" => "Email is required"
+            ], 400);
+        }
+
+        $stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ?");
+        $stmt->bind_param("s", $email);
+        $stmt->execute();
+        $user = $stmt->get_result()->fetch_assoc();
+
+        if (!$user) {
+            Response::json([
+                "status" => false,
+                "message" => "User not found"
+            ], 404);
+        }
+
+        $otpcode = self::generateOTP($user['user_id']);
+
+        if (!$otpcode) {
+            Response::json([
+                "status" => false,
+                "message" => "Failed to generate OTP"
+            ], 500);
+        }
+
+        self::sendEmail($email, $otpcode);
+
         Response::json([
-            "status" => false, 
-            "message" => "Email is required"], 400);
-    }
-
-    $stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ?");
-    $stmt->bind_param("s", $email);
-    $stmt->execute();
-    $user = $stmt->get_result()->fetch_assoc();
-
-    if (!$user) {
-        Response::json([
-            "status" => false,
-            "message" => "User not found"], 404);
-    }
-
-    $otpcode = self::generateOTP($user['user_id']);
-
-    if (!$otpcode) {
-        Response::json([
-            "status" => false, 
-            "message" => "Failed to generate OTP"], 500);
-    }
-
-    self::sendEmail($email, $otpcode);
-
-    Response::json([
-        "status" => true,
-        "message" => "OTP sent to your email"
-    ]);
+            "status" => true,
+            "message" => "OTP sent to your email"
+        ]);
     }
 
     //reset password
-    public static function resetPassword(){
+    public static function resetPassword()
+    {
         $conn = Database::connect();
 
-        $user_id = (int)(Request::input("user_id") ?? 0);
+        $user_id = (int) (Request::input("user_id") ?? 0);
         $otpcode = trim(Request::input("otp_code") ?? "");
         $newPassword = Request::input("new_password") ?? "";
 
         if (!$user_id || $otpcode === "" || $newPassword === "") {
             Response::json([
-                "status" => false, 
-                "message" => "All fields are required"], 400);
+                "status" => false,
+                "message" => "All fields are required"
+            ], 400);
         }
 
         if (!self::verifyOTP($user_id, $otpcode)) {
             Response::json([
-                "status" => false, 
-                "message" => "Invalid or expired OTP"], 401);
+                "status" => false,
+                "message" => "Invalid or expired OTP"
+            ], 401);
         }
 
         $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);

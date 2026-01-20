@@ -137,4 +137,319 @@ WHERE u.username = ?
 
         );
     }
+    
+    // user edit
+    public static function editUser() {
+
+        $conn = Database::connect();
+        $user_id = (int)(Request::input("user_id") ?? 0);
+        $display_name = trim(Request::input("display_name") ?? "");
+        $email = trim(Request::input("email") ?? "");
+        $bio = trim(Request::input("bio") ?? "");
+        $profile_image = trim(Request::input("profile_image") ?? "");
+        $cover_image = trim(Request::input("cover_image") ?? "");
+        $phone_number = trim(Request::input("phone_number") ?? "");
+        
+
+        // Check user exists
+        $sql = "SELECT * FROM users WHERE user_id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        if ($result->num_rows === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "User not found"
+            ], 404);
+            return;
+        }
+
+        $user = $result->fetch_assoc();
+        $updates = $updates ?? [];
+        $params = $params ?? [];
+        $types = "";
+
+        // =====================================
+        // NORMAL PROFILE UPDATES
+        // =====================================
+        
+
+        if (!empty($display_name)) {
+            $updates[] = "display_name = ?";
+            $params[] = $display_name;
+            $types .= "s";
+        }
+        if (!empty($email)) {
+            $updates[] = "email = ?";
+            $params[] = $email;
+            $types .= "s";
+        }
+        if (!empty($bio)) {
+            $updates[] = "bio = ?";
+            $params[] = $bio;
+            $types .= "s";
+        }
+        if (!empty($profile_image)) {
+            $updates[] = "profile_image = ?";
+            $params[] = $profile_image;
+            $types .= "s";
+        }
+        if (!empty($cover_image)) {
+            $updates[] = "cover_image = ?";
+            $params[] = $cover_image;
+            $types .= "s";
+        }
+        if (!empty($phone_number)) {
+            $updates[] = "phone_number = ?";
+            $params[] = $phone_number;
+            $types .= "s";
+        }
+        
+
+        // Nothing to update
+        if (empty($updates)) {
+            Response::json([
+                "status" => false,
+                "message" => "No fields to update"
+            ], 400);
+            return;
+        }
+
+        
+        $params[] = $user_id;
+        $types .= "i";
+
+        $sql = "UPDATE users SET " . implode(" ,", $updates) . " WHERE user_id=?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param($types, ...$params);
+
+        if ($stmt->execute()) {
+            if ($stmt->affected_rows > 0) {
+                Response::json([
+                    "status" => true,
+                    "message" => "User updated successfully"
+                ], 200);
+            } else {
+                Response::json([
+                    "status" => false,
+                    "message" => "No changes were made"
+                ], 200);
+            }
+        }
+    }
+    //request Password OTP
+    public static function requestPasswordOTP() {
+        $user_id=(int)(Request::input("user_id")?? 0);
+        $conn = Database::connect();
+
+        // Check user exists
+        $sql = "SELECT * FROM users WHERE user_id=?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        if ($result->num_rows === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "User not found"
+            ], 404);
+        }
+
+        $user = $result->fetch_assoc();
+
+        // Generate OTP
+        $otp = AuthController::generateOTP($user_id);
+        if (!$otp) {
+            Response::json([
+                "status" => false,
+                "message" => "Failed to generate OTP"
+            ], 500);
+        }
+
+        // Send email
+        $sent = AuthController::sendEmail($user['email'], $otp);
+        if ($sent) {
+            Response::json([
+                "status" => true,
+                "message" => "OTP sent to your email"
+            ], 200);
+        } else {
+            Response::json([
+                "status" => false,
+                "message" => "Failed to send OTP"
+            ], 500);
+        }
+    }
+
+
+    public static function changepassword() {
+
+        $conn = Database::connect();
+        $user_id = (int)(Request::input("user_id") ?? 0);
+        $current_password = trim(Request::input("current_password") ?? "");
+        $new_password = trim(Request::input("new_password") ?? "");
+        $otpcode = trim(Request::input("otpcode") ?? "");
+
+        
+        if ($user_id <= 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid user ID"
+            ], 400);
+            return;
+        }
+
+        if (empty($current_password) || empty($new_password) || empty($otpcode)) {
+            Response::json([
+                "status" => false,
+                "message" => "Current password, new password and OTP are required"
+            ], 400);
+            return;
+        }
+
+        // Check user exists
+        $stmt = $conn->prepare("SELECT password FROM users WHERE user_id = ?");
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        if ($result->num_rows === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "User not found"
+            ], 404);
+            return;
+        }
+
+        $user = $result->fetch_assoc();
+
+        // Verify current password
+        if (!password_verify($current_password, $user['password'])) {
+            Response::json([
+                "status" => false,
+                "message" => "Current password is incorrect"
+            ], 401);
+            return;
+        }
+
+        // Verify OTP
+        if (!AuthController::verifyOTP($user_id, $otpcode)) {
+            Response::json([
+                "status" => false,
+                "message" => "OTP verification failed"
+            ], 401);
+            return;
+        }
+
+        // Hash new password
+        $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
+
+        // Update password
+        $update = $conn->prepare("UPDATE users SET password = ? WHERE user_id = ?");
+        $update->bind_param("si", $hashed_password, $user_id);
+
+        if ($update->execute()) {
+            Response::json([
+                "status" => true,
+                "message" => "Password changed successfully"
+            ], 200);
+        } else {
+            Response::json([
+                "status" => false,
+                "message" => "Failed to update password"
+            ], 500);
+        }
+    }
+    
+    //deactivate user
+    public static function deactivateUser(){
+        $conn = Database::connect();
+        $user_id = (int)(Request::input("user_id") ?? 0);
+        $deactivate = (int)(Request::input("deactivate") ?? 0);
+        if ($user_id <= 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid user ID"
+            ], 400);
+            return;
+        }
+        // Check user exists
+        $stmt = $conn->prepare("SELECT password FROM users WHERE user_id = ?");
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        if ($result->num_rows === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "User not found"
+            ], 404);
+            return;
+        }
+
+        $user = $result->fetch_assoc();
+        //update deactivate
+        $update = $conn->prepare("UPDATE users SET deactivate = ?  WHERE user_id = ?");
+        $update->bind_param("ii", $deactivate, $user_id);
+
+        if ($update->execute()) {
+            Response::json([
+                "status" => true,
+                "message" => "User account is deactivated now"
+            ], 200);
+        } else {
+            Response::json([
+                "status" => false,
+                "message" => "Failed to deactivate userr account"
+            ], 500);
+        }
+    }
+
+    //deleted account
+    public static function deletedAccount(){
+        $conn = Database::connect();
+        $user_id = (int)(Request::input("user_id") ?? 0);
+        $deleted_account = (int)(Request::input("deleted_account") ?? 0);
+        if ($user_id <= 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid user ID"
+            ], 400);
+            return;
+        }
+        // Check user exists
+        $stmt = $conn->prepare("SELECT password FROM users WHERE user_id = ?");
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        if ($result->num_rows === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "User not found"
+            ], 404);
+            return;
+        }
+
+        $user = $result->fetch_assoc();
+        //update deactivate
+        $update = $conn->prepare("UPDATE users SET deleted_account = ?, deactivate = 1, is_active = 0  WHERE user_id = ?");
+        $update->bind_param("ii", $deleted_account, $user_id);
+
+        if ($update->execute()) {
+            Response::json([
+                "status" => true,
+                "message" => "User account is deleted now"
+            ], 200);
+        } else {
+            Response::json([
+                "status" => false,
+                "message" => "Failed to deleted userr account"
+            ], 500);
+        }
+    }
+
 }

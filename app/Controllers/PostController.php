@@ -40,16 +40,26 @@ class PostController
     /* =====================================================
      * Get all posts
      * ===================================================== */
-    public static function getPosts()  
+
+    public static function getPosts()
     {
         $conn = Database::connect();
+        $user_id = (int) (Request::input("user_id") ?? 0);
 
-        $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
-        $limit = 5;
-        $offset = ($page - 1) * $limit;
-        $user_id = Auth::getUser()["user_id"];
+        // If no user_id provided in request, get from Auth
+        if ($user_id === 0) {
+            $user = Auth::getUser();
+            $user_id = $user?->user_id ?? 0;
 
-        $sql = "SELECT 
+
+
+
+            $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
+            $limit = 5;
+            $offset = ($page - 1) * $limit;
+            $user_id = Auth::getUser()["user_id"];
+
+            $sql = "SELECT 
                 p.post_id,
                 p.creator_user_id,
                 p.shared_post_id,
@@ -97,19 +107,126 @@ class PostController
         ";
 
 
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("iii", $user_id, $limit, $offset);
+            $stmt->execute();
+            $result = $stmt->get_result();
+
+            $posts = [];
+            while ($row = $result->fetch_assoc()) {
+                $row["creator"] = [
+                    "id" => $row["creator_user_id"],
+                    "display_name" => $row["display_name"],
+                    "gender" => $row["gender"],
+                    "profile_image" => $row["profile_image"],
+                    "username" => $row["username"]
+                ];
+
+                unset(
+                    $row["display_name"],
+                    $row["gender"],
+                    $row["profile_image"],
+                    $row["username"]
+                );
+
+                $row['attachments'] = [];
+                $posts[$row['post_id']] = $row;
+            }
+
+            self::attachAttachments($conn, $posts);
+
+            $totalPosts = self::getPostCount();
+            $totalPages = ceil($totalPosts / $limit);
+
+            Response::json([
+                "status" => true,
+                "page" => $page,
+                "totalPages" => $totalPages,
+                "data" => array_values($posts)
+            ]);
+
+        }
+
+        // Pagination
+        $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
+        $limit = 5;
+        $offset = ($page - 1) * $limit;
+
+        // SQL query - FIXED syntax error
+        $sql = "
+    SELECT 
+        p.post_id,
+        p.creator_user_id,
+        p.shared_post_id,
+        p.privacy,
+        p.content,
+        p.is_archived,
+        p.is_draft,
+        p.is_deleted,
+        p.is_shared,
+        p.created_at,
+        p.updated_at,
+
+        u.display_name,
+        u.username,
+        u.gender,
+        u.profile_image,
+
+        COUNT(DISTINCT r.post_react_id) AS react_count,
+        COUNT(DISTINCT c.post_comment_id) AS comment_count,
+        (COUNT(DISTINCT r.post_react_id) + COUNT(DISTINCT c.post_comment_id)) AS total_engagement,
+
+        CASE 
+            WHEN COUNT(ur.post_react_id) > 0 THEN 1
+            ELSE 0
+        END AS is_liked,
+
+        MAX(ur.reaction) AS reaction
+
+    FROM posts p
+    JOIN users u ON u.user_id = p.creator_user_id
+    LEFT JOIN post_reacts r ON r.post_id = p.post_id
+    LEFT JOIN post_comments c ON c.post_id = p.post_id
+
+    -- Current user's reaction
+    LEFT JOIN post_reacts ur 
+        ON ur.post_id = p.post_id
+       AND ur.user_id = ?
+
+    -- Filter out hidden posts
+    LEFT JOIN hide_posts hp
+        ON hp.post_id = p.post_id
+       AND hp.user_id = ?
+
+    WHERE p.is_deleted = 0
+      AND p.is_archived = 0
+      AND hp.post_id IS NULL
+
+    GROUP BY p.post_id
+    ORDER BY total_engagement DESC, p.created_at DESC
+    LIMIT ? OFFSET ?
+    ";
+
         $stmt = $conn->prepare($sql);
-        $stmt->bind_param("iii", $user_id, $limit, $offset);
+        if (!$stmt) {
+            Response::json([
+                "status" => false,
+                "message" => "Database error: " . $conn->error
+            ], 500);
+        }
+
+        $stmt->bind_param("iiii", $user_id, $user_id, $limit, $offset);
         $stmt->execute();
         $result = $stmt->get_result();
 
         $posts = [];
         while ($row = $result->fetch_assoc()) {
-            $row["creator"] = [
-                "id" => $row["creator_user_id"],
-                "display_name" => $row["display_name"],
-                "gender" => $row["gender"],
-                "profile_image" => $row["profile_image"],
-                "username" => $row["username"]
+            $creator = [
+                "id" => $row["creator_user_id"] ?? null,
+                "display_name" => $row["display_name"] ?? null,
+                "gender" => $row["gender"] ?? null,
+                "profile_image" => $row["profile_image"] ?? null,
+                "username" => $row["username"] ?? null
             ];
 
             unset(
@@ -119,12 +236,16 @@ class PostController
                 $row["username"]
             );
 
-            $row['attachments'] = [];
-            $posts[$row['post_id']] = $row;
+            $row["creator"] = $creator;
+            $row["attachments"] = [];
+
+            $posts[$row["post_id"]] = $row;
         }
 
+        // Attach post attachments
         self::attachAttachments($conn, $posts);
 
+        // Total posts (exclude hidden posts)
         $totalPosts = self::getPostCount();
         $totalPages = ceil($totalPosts / $limit);
 
@@ -204,9 +325,14 @@ LEFT JOIN post_reacts ur
     ON ur.post_id = p.post_id
    AND ur.user_id = ?
 
+ LEFT JOIN hide_posts hp
+        ON hp.post_id = p.post_id
+       AND hp.user_id = ?
+
 WHERE p.is_deleted = 0
   AND p.is_archived = 0
   AND cu.username = ?
+  AND hp.post_id IS NULL 
 
 ORDER BY p.created_at DESC
 LIMIT ? OFFSET ?;
@@ -214,7 +340,7 @@ LIMIT ? OFFSET ?;
     ";
 
         $stmt = $conn->prepare($sql);
-        $stmt->bind_param("isii", $user_id, $username, $limit, $offset);
+        $stmt->bind_param("iisii", $user_id, $user_id, $username, $limit, $offset);
         $stmt->execute();
 
         $result = $stmt->get_result();
@@ -327,7 +453,12 @@ LIMIT ? OFFSET ?;
                     ON ur.post_id = p.post_id
                 AND ur.user_id = ?
 
+                LEFT JOIN hide_posts hp
+                ON hp.post_id = p.post_id
+                AND hp.user_id = ?
+
                 WHERE p.is_deleted = 0
+                AND hp.post_id IS NULL 
 
                 GROUP BY p.post_id
                 ORDER BY p.created_at DESC
@@ -335,7 +466,7 @@ LIMIT ? OFFSET ?;
     ";
 
         $stmt = $conn->prepare($sql);
-        $stmt->bind_param("iiii", $user_id, $user_id, $limit, $offset);
+        $stmt->bind_param("iiiii", $user_id, $user_id, $user_id, $limit, $offset);
         $stmt->execute();
 
         $result = $stmt->get_result();
@@ -708,43 +839,92 @@ GROUP BY p.post_id
         $conn = Database::connect();
         $creator_id = (int) (Request::input("creator_id") ?? 0);
         $post_id = (int) (Request::input("post_id") ?? 0);
-        $content = trim(Request::input("content") ?? '');
-        $privacy =trim( Request::input("privacy") ?? 'public');
-        $is_deleted=(int)(Request::input("is_deleted") ?? 0);
 
-        if ($post_id=== 0) {
+
+        $privacy = trim(Request::input("privacy") ?? 'public');
+        $is_deleted = (int) (Request::input("is_deleted") ?? 0);
+        $who_can_comment = trim(Request::input("who_can_comment") ?? "");
+        $who_can_react = trim(Request::input("who_can_react") ?? "");
+        $who_can_share = trim(Request::input("who_can_share") ?? "");
+
+        $content = trim(Request::input("content") ?? '');
+        $privacy = trim(Request::input("privacy") ?? 'public');
+        $is_deleted = (int) (Request::input("is_deleted") ?? 0);
+
+
+
+
+
+        if ($post_id === 0) {
             Response::json([
                 "status" => false,
                 "message" => "Invalid post"
             ], 400);
         }
+        $fields = [];
+        $params = [];
+        $types = "";
 
+
+
+        if ($privacy) {
+            $fields[] = "privacy = ?";
+            $params[] = $privacy;
+            $types .= "s";
+        }
+
+        if ($is_deleted !== null) {
+            $fields[] = "is_deleted = ?";
+            $params[] = (int) $is_deleted;
+            $types .= "i";
+        }
+
+        if ($who_can_comment) {
+            $fields[] = "who_can_comment = ?";
+            $params[] = $who_can_comment;
+            $types .= "s";
+        }
+
+        if ($who_can_react) {
+            $fields[] = "who_can_react = ?";
+            $params[] = $who_can_react;
+            $types .= "s";
+        }
+
+        if ($who_can_share) {
+            $fields[] = "who_can_share = ?";
+            $params[] = $who_can_share;
+            $types .= "s";
+        }
+
+        if (empty($fields)) {
+            Response::json([
+                "status" => false,
+                "message" => "Nothing to update"
+            ], 400);
+        }
+
+        $fields[] = "updated_at = NOW()";
+
+        $sql = "
+            UPDATE posts
+            SET " . implode(", ", $fields) . "
+            WHERE post_id = ? AND creator_user_id = ?
+        ";
+
+        $params[] = $post_id;
+        $params[] = $creator_id;
+        $types .= "ii";
         // Start transaction
         $conn->begin_transaction();
 
         try {
-            // =============================
-            // Insert post
-            // =============================
-            $sql = "
-                    UPDATE posts
-                    SET content = ?, privacy = ?, is_deleted = ?, updated_at = NOW()
-                    WHERE post_id = ? and creator_user_id=?
-        ";
-
+            // Update post
             $stmt = $conn->prepare($sql);
-            $stmt->bind_param(
-                "ssiii",
-                $content,
-                $privacy,
-                $is_deleted,
-                $post_id,
-                $creator_id
-            );
-
+            $stmt->bind_param($types, ...$params);
             $stmt->execute();
 
-            
+
 
             // =============================
             // Handle post_attachments (optional)
@@ -903,10 +1083,10 @@ GROUP BY p.post_id
         $conn = Database::connect();
         $creator_id = (int) (Request::input("creator_id") ?? 0);
         $post_id = (int) (Request::input("post_id") ?? 0);
-        $privacy =trim( Request::input("privacy") ?? 'public');
-        
+        $privacy = trim(Request::input("privacy") ?? 'public');
 
-        if ($post_id=== 0) {
+
+        if ($post_id === 0) {
             Response::json([
                 "status" => false,
                 "message" => "Invalid post"
@@ -937,7 +1117,7 @@ GROUP BY p.post_id
 
             $stmt->execute();
 
-            
+
 
             // =============================
             // Handle post_attachments (optional)
@@ -1083,6 +1263,157 @@ GROUP BY p.post_id
             Response::json([
                 "status" => false,
                 "message" => "Failed to edit post",
+                "error" => $e->getMessage()
+            ], 500);
+        }
+    }
+    /* =====================================================
+     *  Edit Post Content History
+     * ===================================================== */
+
+    public static function editHistory()
+    {
+        $conn = Database::connect();
+
+        // FIX 1: use Request::input instead of $input
+        $post_id = (int) (Request::input("post_id") ?? 0);
+        $creator_id = (int) (Request::input("creator_id") ?? 0);
+
+        $content = trim(Request::input("content") ?? "");
+
+        if ($post_id === 0 || $creator_id === 0 || $content === '') {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid input"
+            ], 400);
+            return; // FIX 2
+        }
+
+        $conn->begin_transaction();
+
+        try {
+
+            $sql = "
+                SELECT content
+                FROM posts
+                WHERE post_id = ? AND creator_user_id = ?
+                FOR UPDATE
+            ";
+
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("ii", $post_id, $creator_id);
+            $stmt->execute();
+
+            $oldPost = $stmt->get_result()->fetch_assoc();
+
+            // FIX 3: define variables
+            $oldContent = $oldPost['content'];
+
+
+            // change edit history
+
+
+            $historySql = "
+                    INSERT INTO edit_history (
+                        post_id,
+                        old_content
+                    ) VALUES (?, ?)
+                ";
+
+            $stmtHistory = $conn->prepare($historySql);
+            $stmtHistory->bind_param(
+                "is",
+                $post_id,
+                $oldContent,
+
+            );
+            $stmtHistory->execute();
+
+
+            // update post content
+            $updateSql = "
+                UPDATE posts
+                SET content = ?, updated_at = NOW()
+                WHERE post_id = ? AND creator_user_id = ?
+            ";
+
+            $stmtUpdate = $conn->prepare($updateSql);
+            $stmtUpdate->bind_param(
+                "sii",
+                $content,
+                $post_id,
+                $creator_id
+            );
+            $stmtUpdate->execute();
+
+            $conn->commit();
+
+            Response::json([
+                "status" => true,
+                "message" => "Post edited successfully"
+            ]);
+
+        } catch (\Throwable $e) {
+
+            $conn->rollback();
+
+            Response::json([
+                "status" => false,
+                "message" => "Failed to edit post",
+                "error" => $e->getMessage()
+            ], 500);
+        }
+    }
+    /* =====================================================
+     *  Get All Edit History
+     * ===================================================== */
+    public static function getEditHistory()
+    {
+        $conn = Database::connect();
+
+
+        $post_id = (int) (Request::input("post_id") ?? 0);
+
+        if ($post_id === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid post_id"
+            ], 400);
+            return;
+        }
+
+        try {
+
+            $sql = "SELECT history_id, old_value, new_value, edited_at 
+                    FROM edit_history 
+                    WHERE post_id = ? 
+                    ORDER BY edited_at DESC";
+
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("i", $post_id);
+            $stmt->execute();
+
+            $result = $stmt->get_result();
+            $history = [];
+
+            while ($row = $result->fetch_assoc()) {
+                $history[] = [
+                    "history_id" => $row["history_id"],
+                    "old_value" => $row["old_value"],
+                    "new_value" => $row["new_value"],
+                    "edited_at" => $row["edited_at"]
+                ];
+            }
+            Response::json([
+                "status" => true,
+                "post_id" => $post_id,
+                "data" => $history
+            ]);
+
+        } catch (\Throwable $e) {
+            Response::json([
+                "status" => false,
+                "message" => "Failed to get edit history",
                 "error" => $e->getMessage()
             ], 500);
         }
@@ -1463,9 +1794,17 @@ GROUP BY p.post_id
         $stmtSave = $conn->prepare($sql);
         $stmtSave->bind_param("iiii", $user_id, $user_id, $limit, $offset);
         $stmtSave->execute();
+
+        if ($stmtSave->error) {
+            Response::json(["status" => false, "error" => $stmtSave->error]);
+            return;
+        }
+
         $result = $stmtSave->get_result();
         $posts = [];
+
         while ($row = $result->fetch_assoc()) {
+
             $row["creator"] = [
                 "id" => $row["creator_user_id"],
                 "display_name" => $row["display_name"],
@@ -1507,21 +1846,37 @@ GROUP BY p.post_id
     public static function getPostCount($userId = 0)
     {
         $conn = Database::connect();
+        $user = Auth::getUser();
+        $user_id = $user?->user_id ?? 0;
 
         if ($userId === 0) {
-            $result = $conn->query("
-                SELECT COUNT(*) AS total 
-                FROM posts 
-                WHERE is_deleted = 0
-            ");
-            return (int) $result->fetch_assoc()['total'];
+            // Count all posts excluding hidden ones for the current user
+            $sql = "
+            SELECT COUNT(DISTINCT p.post_id) AS total
+            FROM posts p
+            LEFT JOIN hide_posts hp
+                ON hp.post_id = p.post_id
+               AND hp.user_id = ?
+            WHERE p.is_deleted = 0
+              AND p.is_archived = 0
+              AND hp.post_id IS NULL
+        ";
+
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("i", $user_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $row = $result->fetch_assoc();
+
+            return $row ? (int) $row['total'] : 0;
         }
 
+        // Count posts for a specific user (no hidden post filter needed here)
         $stmt = $conn->prepare("
-            SELECT COUNT(*) AS total 
-            FROM posts 
-            WHERE is_deleted = 0 AND creator_user_id = ?
-        ");
+        SELECT COUNT(*) AS total 
+        FROM posts 
+        WHERE is_deleted = 0 AND creator_user_id = ?
+    ");
         $stmt->bind_param("i", $userId);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -1548,14 +1903,17 @@ GROUP BY p.post_id
         $conn = Database::connect();
 
         $stmt = $conn->prepare("SELECT COUNT(DISTINCT p.post_id) AS total
-            FROM posts p
-            INNER JOIN follows f ON f.following_user_id = p.creator_user_id 
-                AND f.follower_user_id = ?
-            WHERE p.is_deleted = 0 OR p.is_archived = 0
+        FROM posts p
+        INNER JOIN follows f ON f.following_user_id = p.creator_user_id 
+            AND f.follower_user_id = ?
+        LEFT JOIN hide_posts hp ON hp.post_id = p.post_id
+            AND hp.user_id = ?  -- Current user hiding posts
+        WHERE (p.is_deleted = 0 AND p.is_archived = 0)
+          AND hp.post_id IS NULL  -- Exclude hidden posts
         ");
 
         // $stmt = $conn->prepare($stmt);
-        $stmt->bind_param("i", $userId);
+        $stmt->bind_param("ii", $userId, $userId);
         $stmt->execute();
         $result = $stmt->get_result();
 
@@ -1565,17 +1923,23 @@ GROUP BY p.post_id
     private static function getPostCountByUsername($username)
     {
         $conn = Database::connect();
+        $user = Auth::getUser();
+        $current_user_id = $user?->user_id ?? 0;
 
-        $stmt = $conn->prepare("SELECT COUNT(DISTINCT p.post_id) AS total
-FROM posts p
-JOIN users u 
-    ON u.user_id = p.creator_user_id
-WHERE u.username = ?
-  AND p.is_deleted = 0
-  AND p.is_archived = 0;
+        $stmt = $conn->prepare(" SELECT COUNT(DISTINCT p.post_id) AS total
+            FROM posts p
+            JOIN users u 
+                ON u.user_id = p.creator_user_id
+            LEFT JOIN hide_posts hp
+                ON hp.post_id = p.post_id
+               AND hp.user_id = ?
+            WHERE u.username = ?
+              AND p.is_deleted = 0
+              AND p.is_archived = 0
+              AND hp.post_id IS NULL
 ");
 
-        $stmt->bind_param("s", $username);
+        $stmt->bind_param("is", $current_user_id, $username);
         $stmt->execute();
 
         $result = $stmt->get_result();

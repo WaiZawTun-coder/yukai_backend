@@ -163,34 +163,47 @@ class FriendController
 
         $user = Auth::getUser();
         $type = (string) ($input['status'] ?? '');
+
         if (in_array($type, ['accepted', 'rejected'])) {
-            $sender_id = (int) ($input["user_id"] ?? 0);
-            $receiver_id = $user["user_id"];
+            $sender_id = (int) ($input["user_id"] ?? 0);   // requester
+            $receiver_id = (int) $user["user_id"];        // me
         } else {
-            $sender_id = $user["user_id"];
+            $sender_id = (int) $user["user_id"];
             $receiver_id = (int) ($input["user_id"] ?? 0);
         }
-        // $sender_id = $user["user_id"];
-        // $receiver_id = (int) ($input['user_id'] ?? 0);
 
         if (!in_array($type, ['accepted', 'rejected', 'canceled'])) {
             Response::json([
                 "status" => false,
-                "message" => "invalid input"
+                "message" => "Invalid input"
             ]);
+            return;
         }
-        $acceptFri = "Update friends set status=? where user_1_id=? and user_2_id=? and status='pending'";
+
+        $acceptFri = "
+        UPDATE friends 
+        SET status = ? 
+        WHERE user_1_id = ? 
+          AND user_2_id = ? 
+          AND status = 'pending'
+    ";
+
         $updateFriList = $conn->prepare($acceptFri);
         $updateFriList->bind_param("sii", $type, $sender_id, $receiver_id);
         $updateFriList->execute();
 
         if ($type === 'canceled') {
-            $message = "Friend requent canceled";
+            $message = "Friend request canceled";
+
         } else if ($type === 'accepted') {
             $message = "Friend request accepted";
+
+            // follow logic
             self::addFollow($conn, true, $receiver_id, $sender_id);
+            self::createPrivateChatIfNotExists($conn, $receiver_id, $sender_id);
+
         } else if ($type === "rejected") {
-            $message = "Friend request rejected ";
+            $message = "Friend request rejected";
         }
 
         Response::json([
@@ -198,8 +211,8 @@ class FriendController
             "message" => $message,
             "type" => $type
         ]);
-
     }
+
     public static function getFriendRequest()
     {
         $conn = Database::connect();
@@ -466,164 +479,169 @@ class FriendController
             "data" => $people
         ]);
     }
-    public static function followUser(){
-        $conn=Database::connect();
-        $input=Request::json();
-        $follower_id=(int)($input['follower_id']?? 0); // login user
-        $following_id=(int)($input['following_id']?? 0);
+    public static function followUser()
+    {
+        $conn = Database::connect();
+        $input = Request::json();
+        $follower_id = (int) ($input['follower_id'] ?? 0); // login user
+        $following_id = (int) ($input['following_id'] ?? 0);
 
 
-        if( $follower_id===0 || $following_id===0 || $follower_id==$following_id ){
+        if ($follower_id === 0 || $following_id === 0 || $follower_id == $following_id) {
             Response::json([
-                "status"=>false,
-                "message"=>"Invalid Follower"
+                "status" => false,
+                "message" => "Invalid Follower"
             ]);
         }
 
-        $checkSql="SELECT follow_id from follows where(follower_user_id=? AND following_user_id=?)";
-        $followingCheck=$conn->prepare("$checkSql");
-        $followingCheck->bind_param("ii",$follower_id,$following_id);
+        $checkSql = "SELECT follow_id from follows where(follower_user_id=? AND following_user_id=?)";
+        $followingCheck = $conn->prepare("$checkSql");
+        $followingCheck->bind_param("ii", $follower_id, $following_id);
         $followingCheck->execute();
         Response::json([
-                "status"=>false,
-                "message"=>"Already follow this user"
+            "status" => false,
+            "message" => "Already follow this user"
         ]);
 
-        $followerSql="INSERT INTO follows(follower_user_id,following_user_id) values(?,?)";
-        $follower=$conn->prepare($followerSql);
-        $follower->bind_param("ii",$follower_id,$following_id);
+        $followerSql = "INSERT INTO follows(follower_user_id,following_user_id) values(?,?)";
+        $follower = $conn->prepare($followerSql);
+        $follower->bind_param("ii", $follower_id, $following_id);
         $follower->execute();
         Response::json([
-                "status"=>true,
-                "message"=>"Following request sent"
+            "status" => true,
+            "message" => "Following request sent"
         ]);
     }
-    public static function unfollowUser(){
-        $conn=Database::connect();
-        $input=Request::json();
-        $follower_id=(int)($input['follower_id']?? 0); // login user
-        $following_id=(int)($input['following_id']?? 0);
+    public static function unfollowUser()
+    {
+        $conn = Database::connect();
+        $input = Request::json();
+        $follower_id = (int) ($input['follower_id'] ?? 0); // login user
+        $following_id = (int) ($input['following_id'] ?? 0);
 
-        if($follower_id===$following_id){
-           Response::json([
-                "status"=>false,
-                "message"=>"Invalid user_id"
-           ]);
-           return;
+        if ($follower_id === $following_id) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid user_id"
+            ]);
+            return;
         }
-        $unfollowSql="Update follows SET status=0 where (follower_user_id=? AND following_user_id=?) AND status=1 ";
-        $unfollow=$conn->prepare($unfollowSql);
-        $unfollow->bind_param("ii",$follower_id,$following_id);
+        $unfollowSql = "Update follows SET status=0 where (follower_user_id=? AND following_user_id=?) AND status=1 ";
+        $unfollow = $conn->prepare($unfollowSql);
+        $unfollow->bind_param("ii", $follower_id, $following_id);
         $unfollow->execute();
         Response::json([
-                "status"=>true,
-                "message"=>"Cancel following"
+            "status" => true,
+            "message" => "Cancel following"
         ]);
     }
-    public static function blockUser(){
-        $conn=Database::connect();
-        $input=Request::json();
-        $blocker_User=(int)($input['blocker_user_id']?? 0);//login user
-        $blocked_User=(int)($input['blocked_user_id']?? 0);
+    public static function blockUser()
+    {
+        $conn = Database::connect();
+        $input = Request::json();
+        $blocker_User = (int) ($input['blocker_user_id'] ?? 0);//login user
+        $blocked_User = (int) ($input['blocked_user_id'] ?? 0);
         //self block
-        if($blocker_User===$blocked_User ||$blocked_User===0 || $blocker_User===0){
+        if ($blocker_User === $blocked_User || $blocked_User === 0 || $blocker_User === 0) {
             Response::json([
-                    "status"=>false,
-                    "message"=>"Invalid user_id"
+                "status" => false,
+                "message" => "Invalid user_id"
             ]);
         }
 
         $conn->begin_transaction();
-        
-            // try{
-                $blockUserSql="INSERT INTO blocks (blocker_user_id,blocked_user_id) values (?,?)";
-                $blockUser=$conn->prepare($blockUserSql);
-                $blockUser->bind_param("ii",$blocker_User,$blocked_User);
-                $blockUser->execute();
+
+        // try{
+        $blockUserSql = "INSERT INTO blocks (blocker_user_id,blocked_user_id) values (?,?)";
+        $blockUser = $conn->prepare($blockUserSql);
+        $blockUser->bind_param("ii", $blocker_User, $blocked_User);
+        $blockUser->execute();
         //     Response::json([
         //          "status" => true,
         //          "message" => "Block successful"
         // ]);
-                $removeFollowerSql="DELETE FROM  follows where (follower_user_id=? AND following_user_id=?) OR (following_user_id=? AND follower_user_id=?)";
-                $removeFollower=$conn->prepare($removeFollowerSql);
-                $removeFollower->bind_param("iiii",$blocker_User,$blocked_User,$blocker_User,$blocked_User);
-                $removeFollower->execute();
+        $removeFollowerSql = "DELETE FROM  follows where (follower_user_id=? AND following_user_id=?) OR (following_user_id=? AND follower_user_id=?)";
+        $removeFollower = $conn->prepare($removeFollowerSql);
+        $removeFollower->bind_param("iiii", $blocker_User, $blocked_User, $blocker_User, $blocked_User);
+        $removeFollower->execute();
 
-                $removeFriendSql="DELETE FROM friends where (user_1_id=? and user_2_id=?) OR (user_2_id=? AND user_1_id=?)";
-                $removeFriend=$conn->prepare($removeFriendSql);
-                $removeFriend->bind_param("iiii",$blocker_User,$blocked_User,$blocker_User,$blocked_User);
-                $removeFriend->execute();
-                $conn->commit();
-                Response::json([
-                      "status"=>true,
-                      "message"=>"block user successful"
-                 ]);  
-                // }catch(\Exception $e){
-                //      $conn->rollback();
-                //      Response::json([
-                //            "status"=>false,
-                //            "message"=>"message failed"
-                //  ]);
-    // }
-   
+        $removeFriendSql = "DELETE FROM friends where (user_1_id=? and user_2_id=?) OR (user_2_id=? AND user_1_id=?)";
+        $removeFriend = $conn->prepare($removeFriendSql);
+        $removeFriend->bind_param("iiii", $blocker_User, $blocked_User, $blocker_User, $blocked_User);
+        $removeFriend->execute();
+        $conn->commit();
+        Response::json([
+            "status" => true,
+            "message" => "block user successful"
+        ]);
+        // }catch(\Exception $e){
+        //      $conn->rollback();
+        //      Response::json([
+        //            "status"=>false,
+        //            "message"=>"message failed"
+        //  ]);
+        // }
+
 
     }
-    public static function unblockUser(){
-        $conn=Database::connect();
-        $input=Request::json();
-        $unblock_user=(int)($input['unblock_user']?? 0);
-        $unblocked_user=(int)($input['unblocked_user']?? 0);
-        if($unblock_user===$unblocked_user || $unblock_user===0 || $unblocked_user===0){
+    public static function unblockUser()
+    {
+        $conn = Database::connect();
+        $input = Request::json();
+        $unblock_user = (int) ($input['unblock_user'] ?? 0);
+        $unblocked_user = (int) ($input['unblocked_user'] ?? 0);
+        if ($unblock_user === $unblocked_user || $unblock_user === 0 || $unblocked_user === 0) {
             Response::json([
-                    "status"=>false,
-                    "message"=>"Invalid user_id"
+                "status" => false,
+                "message" => "Invalid user_id"
             ]);
         }
-        $unblockuserSql="DELETE FROM blocks where blocker_user_id=? and blocked_user_id=?";
-        $unblockuser=$conn->prepare($unblockuserSql);
-        $unblockuser->bind_param("ii",$unblock_user,$unblocked_user);
+        $unblockuserSql = "DELETE FROM blocks where blocker_user_id=? and blocked_user_id=?";
+        $unblockuser = $conn->prepare($unblockuserSql);
+        $unblockuser->bind_param("ii", $unblock_user, $unblocked_user);
         $unblockuser->execute();
-        if($unblockuser->affected_rows>0){
+        if ($unblockuser->affected_rows > 0) {
             Response::json([
-            "status"=>true,
-            "message"=>"Unblock this user"
-        ]);
-        }else{
+                "status" => true,
+                "message" => "Unblock this user"
+            ]);
+        } else {
             Response::json([
-                "status"=>false,
-                "message"=>"you did not block this user so u cannot make unblocking process"
+                "status" => false,
+                "message" => "you did not block this user so u cannot make unblocking process"
             ]);
         }
-        
+
     }
-    public static function unfriend(){
-        $conn=Database::connect();
-        $input=Request::json();
-        $user_1_id=(int)($input['user_1_id']?? 0);
-        $user_2_id=(int)($input['user_2_id']?? 0);
-        if($user_1_id===$user_2_id || $user_1_id===0 || $user_2_id===0){
+    public static function unfriend()
+    {
+        $conn = Database::connect();
+        $input = Request::json();
+        $user_1_id = (int) ($input['user_1_id'] ?? 0);
+        $user_2_id = (int) ($input['user_2_id'] ?? 0);
+        if ($user_1_id === $user_2_id || $user_1_id === 0 || $user_2_id === 0) {
             Response::json([
-                "status"=>false,
-                "message"=>"invalid user"
+                "status" => false,
+                "message" => "invalid user"
             ]);
         }
-        $unfriendSql="DELETE FROM friends WHERE user_1_id=? and user_2_id=? AND status='accepted'";
-        $unfriend=$conn->prepare($unfriendSql);
-        $unfriend->bind_param("ii",$user_1_id,$user_2_id);
+        $unfriendSql = "DELETE FROM friends WHERE user_1_id=? and user_2_id=? AND status='accepted'";
+        $unfriend = $conn->prepare($unfriendSql);
+        $unfriend->bind_param("ii", $user_1_id, $user_2_id);
         $unfriend->execute();
-        if($unfriend->affected_rows>0){
+        if ($unfriend->affected_rows > 0) {
             Response::json([
-            "status"=>true,
-            "message"=>"unfriend successfully"
-        ]);
-        }else{
+                "status" => true,
+                "message" => "unfriend successfully"
+            ]);
+        } else {
             Response::json([
-                "status"=>false,
-                "message"=>"you are not friends so you cannot unfriend this user"
+                "status" => false,
+                "message" => "you are not friends so you cannot unfriend this user"
             ]);
         }
-        
-        
+
+
     }
 
 
@@ -668,6 +686,60 @@ class FriendController
         $followStmt->execute();
     }
 
+    private static function createPrivateChatIfNotExists($conn, $userA, $userB)
+    {
+        // Check if chat already exists
+        $checkSql = "
+        SELECT c.chat_id
+        FROM chats c
+        JOIN chat_participants a ON a.chat_id = c.chat_id
+        JOIN chat_participants b ON b.chat_id = c.chat_id
+        WHERE c.type = 'private'
+          AND a.user_id = ?
+          AND b.user_id = ?
+        LIMIT 1
+    ";
 
+        $stmt = $conn->prepare($checkSql);
+        $stmt->bind_param("ii", $userA, $userB);
+        $stmt->execute();
+        $existing = $stmt->get_result()->fetch_assoc();
 
+        if ($existing) {
+            return $existing["chat_id"]; // already exists
+        }
+
+        // Create chat
+        $conn->begin_transaction();
+
+        try {
+            $insertChat = $conn->prepare("
+            INSERT INTO chats (type, created_by_user_id)
+            VALUES ('private', ?)
+        ");
+            $insertChat->bind_param("i", $userA);
+            $insertChat->execute();
+            $chat_id = $insertChat->insert_id;
+
+            $insertParticipant = $conn->prepare("
+            INSERT INTO chat_participants (chat_id, user_id, encrypted_key)
+            VALUES (?, ?, '')
+        ");
+
+            // user A
+            $insertParticipant->bind_param("ii", $chat_id, $userA);
+            $insertParticipant->execute();
+
+            // user B
+            $insertParticipant->bind_param("ii", $chat_id, $userB);
+            $insertParticipant->execute();
+
+            $conn->commit();
+            return $chat_id;
+
+        } catch (Exception $e) {
+            $conn->rollback();
+            return null;
+        }
+    }
 }
