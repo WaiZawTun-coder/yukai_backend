@@ -7,9 +7,9 @@ use App\Controllers\PostController;
 use App\Controllers\PostHidingController;
 use App\Controllers\UserController;
 use App\Controllers\SaveController;
+use App\Controllers\SearchController;
 use App\Controllers\ChatController;
 use App\Controllers\MessageController;
-use App\Controllers\SearchController;
 use App\Core\Auth;
 
 /*
@@ -523,7 +523,7 @@ Router::add(
 */
 
 Router::add(
-    "POST",
+    "GET",
     "/api/chat/get-messages",
     fn() =>
     MessageController::getMessages(),
