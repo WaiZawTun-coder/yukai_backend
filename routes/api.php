@@ -445,7 +445,7 @@ Router::add(
 */
 
 Router::add(
-    "POST",
+    "GET",
     "/api/search",
     fn() =>
     SearchController::search(),

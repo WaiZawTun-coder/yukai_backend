@@ -12,13 +12,18 @@ use App\Service\PasswordService;
 use App\Service\ImageService;
 use DateTime;
 
-class SearchController{
-    public static function search(){
+class SearchController
+{
+    public static function search()
+    {
         $conn = Database::connect();
-        // $authUser = Auth::getUser();
-        $user_id = (int)(Request::input("user_id")?? 0);
+        $authUser = Auth::getUser();
+        $user_id = $authUser["user_id"];
+        // $user_id = (int)(Request::input("user_id")?? 0);
 
-        $keyword = trim(Request::input("keyword") ?? "");
+
+        // $keyword = trim(Request::input("keyword") ?? "");
+        $keyword = trim($_GET["keyword"] ?? "");
         $page = max(1, (int) ($_GET['page'] ?? 1));
         $limit = 5;
         $offset = ($page - 1) * $limit;
@@ -34,17 +39,17 @@ class SearchController{
         $search_word = "%{$keyword}%";
 
         $data = [
-                "users" => [
-                    "page" => $page,
-                    "total_pages" => 0,
-                    "data" => []
-                ],
-                "posts" => [
-                    "page" => $page,
-                    "total_pages" => 0,
-                    "data" => []
-                ]
-                ];
+            "users" => [
+                "page" => $page,
+                "total_pages" => 0,
+                "data" => []
+            ],
+            "posts" => [
+                "page" => $page,
+                "total_pages" => 0,
+                "data" => []
+            ]
+        ];
 
 
         /* =======================
@@ -52,7 +57,7 @@ class SearchController{
         ======================= */
 
         $sql = "
-            SELECT u.user_id, u.username, u.display_name, u.profile_image
+            SELECT u.user_id, u.username, u.display_name, u.profile_image, u.gender
             FROM users u
             WHERE u.display_name LIKE ?
             AND is_active = 1
@@ -69,7 +74,7 @@ class SearchController{
         ";
 
         $stmt = $conn->prepare($sql);
-        $stmt->bind_param("siiii", $search_word,$user_id,$user_id, $limit, $offset);
+        $stmt->bind_param("siiii", $search_word, $user_id, $user_id, $limit, $offset);
         $stmt->execute();
         $users_result = $stmt->get_result();
 
@@ -82,8 +87,8 @@ class SearchController{
                 "user_id" => $user["user_id"],
                 "display_name" => $user["display_name"],
                 "username" => $user["username"],
-                "profile_image" => $user["profile_image"]
-                
+                "profile_image" => $user["profile_image"],
+                "gender" => $user["gender"]
             ];
         }
 
@@ -163,16 +168,16 @@ class SearchController{
             ORDER BY p.created_at DESC
             LIMIT ? OFFSET ?
         ";
-    
+
         $stmt = $conn->prepare($sql);
         $stmt->bind_param(
             "isiiiiii",
-            $user_id,      
-            $search_word,  
-            $user_id,      
-            $user_id, 
             $user_id,
-            $user_id,    
+            $search_word,
+            $user_id,
+            $user_id,
+            $user_id,
+            $user_id,
             $limit,
             $offset
         );
@@ -205,12 +210,12 @@ class SearchController{
 
         // $data["posts"] = array_values($posts);
 
-        
-        $totalPosts = self::postCountByKeywords($search_word,$user_id);
+
+        $totalPosts = self::postCountByKeywords($search_word, $user_id);
         $totalPostPages = ceil($totalPosts / $limit);
         $data["posts"]["total_pages"] = $totalPostPages;
         $data["posts"]["data"] = array_values($posts);
-       
+
 
         /* =======================
            RESPONSE
@@ -219,12 +224,12 @@ class SearchController{
         Response::json([
             "status" => true,
             "keyword" => $keyword,
-            
+
             "data" => $data
         ]);
     }
 
-    private static function postCountByKeywords($search_word, $user_id) 
+    private static function postCountByKeywords($search_word, $user_id)
     {
         $conn = Database::connect();
 
@@ -262,7 +267,7 @@ class SearchController{
     }
 
     private static function userCountByKeyword($search_word, $user_id)
-{
+    {
         $conn = Database::connect();
 
         $sql = "
@@ -286,7 +291,7 @@ class SearchController{
         $stmt->execute();
 
         return (int) $stmt->get_result()->fetch_assoc()['total'];
-}
+    }
 
 
 }
