@@ -12,109 +12,133 @@ class UserController
     public static function getUser()
     {
         $conn = Database::connect();
-        $input = Request::json();
-        $username = $_GET["username"];
+        $username = trim($_GET["username"] ?? "");
 
-        $user = Auth::getUser();
-        $userId = $user["user_id"];
+        $authUser = Auth::getUser();
+        $userId = (int) $authUser["user_id"];
 
-        if (trim($username) === "") {
+        if ($username === "") {
             Response::json([
                 "status" => false,
                 "message" => "Invalid Username"
-            ]);
+            ], 400);
+            return;
         }
 
-        $userSql = "SELECT 
-    u.user_id,
-    u.username,
-    u.display_name,
-    u.gender,
-    u.email,
-    u.phone_number,
-    u.profile_image,
-    u.cover_image,
-    u.bio,
-    u.birthday,
-    u.location,
-    u.is_active,
-    u.last_seen,
-    u.default_audience,
+        $userSql = "
+        SELECT 
+            u.user_id,
+            u.username,
+            u.display_name,
+            u.gender,
+            u.email,
+            u.phone_number,
+            u.profile_image,
+            u.cover_image,
+            u.bio,
+            u.birthday,
+            u.location,
+            u.is_active,
+            u.last_seen,
+            u.default_audience,
 
-    -- followers
-    (
-        SELECT COUNT(*) 
-        FROM follows f 
-        WHERE f.following_user_id = u.user_id
-    ) AS follower_count,
+            -- followers
+            (
+                SELECT COUNT(*) 
+                FROM follows f 
+                WHERE f.following_user_id = u.user_id
+                  AND f.status = 1
+            ) AS follower_count,
 
-    -- following
-    (
-        SELECT COUNT(*) 
-        FROM follows f 
-        WHERE f.follower_user_id = u.user_id
-    ) AS following_count,
+            -- following
+            (
+                SELECT COUNT(*) 
+                FROM follows f 
+                WHERE f.follower_user_id = u.user_id
+                  AND f.status = 1
+            ) AS following_count,
 
-    -- friends
-    (
-        SELECT COUNT(*) 
-        FROM friends fr
-        WHERE fr.user_1_id = u.user_id
-           OR fr.user_2_id = u.user_id
-    ) AS friends_count,
+            -- friends
+            (
+                SELECT COUNT(*) 
+                FROM friends fr
+                WHERE fr.user_1_id = u.user_id
+                   OR fr.user_2_id = u.user_id
+            ) AS friends_count,
 
-    -- friend status (NULL if own profile)
-    CASE
-        WHEN u.user_id = ? THEN NULL
-        ELSE (
-            SELECT fr.status
-            FROM friends fr
-            WHERE 
-                (fr.user_1_id = ? AND fr.user_2_id = u.user_id)
-             OR (fr.user_1_id = u.user_id AND fr.user_2_id = ?)
-            LIMIT 1
-        )
-    END AS friend_status,
+            -- friend status (NULL if own profile)
+            CASE
+                WHEN u.user_id = ? THEN NULL
+                ELSE (
+                    SELECT fr.status
+                    FROM friends fr
+                    WHERE 
+                        (fr.user_1_id = ? AND fr.user_2_id = u.user_id)
+                     OR (fr.user_1_id = u.user_id AND fr.user_2_id = ?)
+                    LIMIT 1
+                )
+            END AS friend_status,
 
-    -- who sent request (NULL if own profile)
-    CASE
-        WHEN u.user_id = ? THEN NULL
-        ELSE (
-            SELECT 
-                CASE
-                    WHEN fr.user_1_id = ? THEN 'sent'
-                    WHEN fr.user_2_id = ? THEN 'received'
-                END
-            FROM friends fr
-            WHERE 
-                (fr.user_1_id = ? AND fr.user_2_id = u.user_id)
-             OR (fr.user_1_id = u.user_id AND fr.user_2_id = ?)
-            LIMIT 1
-        )
-    END AS request_direction
+            -- is following (FIXED)
+            CASE
+                WHEN u.user_id = ? THEN NULL
+                ELSE (
+                    SELECT COUNT(*) 
+                    FROM follows f 
+                    WHERE 
+                        f.follower_user_id = ?
+                        AND f.following_user_id = u.user_id
+                        AND f.status = 1
+                )
+            END AS is_following,
 
-FROM users u
-WHERE u.username = ?
-";
+            -- who sent request (NULL if own profile)
+            CASE
+                WHEN u.user_id = ? THEN NULL
+                ELSE (
+                    SELECT 
+                        CASE
+                            WHEN fr.user_1_id = ? THEN 'sent'
+                            WHEN fr.user_2_id = ? THEN 'received'
+                        END
+                    FROM friends fr
+                    WHERE 
+                        (fr.user_1_id = ? AND fr.user_2_id = u.user_id)
+                     OR (fr.user_1_id = u.user_id AND fr.user_2_id = ?)
+                    LIMIT 1
+                )
+            END AS request_direction
+
+        FROM users u
+        WHERE u.username = ?
+        LIMIT 1
+    ";
 
         $stmt = $conn->prepare($userSql);
+
         $stmt->bind_param(
-            "iiiiiiiis",
-            $userId, // CASE own profile (friend_status)
+            "iiiiiiiiiis",
 
-            $userId, // friend_status subquery
+            // friend_status (3)
+            $userId,
+            $userId,
             $userId,
 
-            $userId, // CASE own profile (direction)
-
-            $userId, // direction CASE WHEN
+            // is_following (2)
+            $userId,
             $userId,
 
-            $userId, // direction subquery
+            // request_direction (5)
+            $userId,
+            $userId,
+            $userId,
+            $userId,
             $userId,
 
+            // username
             $username
         );
+
         $stmt->execute();
         $result = $stmt->get_result();
 
@@ -123,33 +147,37 @@ WHERE u.username = ?
                 "status" => false,
                 "message" => "User not found"
             ], 404);
-
+            return;
         }
 
         $user = $result->fetch_assoc();
 
-        Response::json(
-            [
-                "status" => true,
-                "message" => "Users are as follow",
-                "data" => $user
-            ]
+        // ✅ Cast is_following into boolean
+        if ($user["is_following"] !== null) {
+            $user["is_following"] = ((int) $user["is_following"]) > 0;
+        }
 
-        );
+        Response::json([
+            "status" => true,
+            "message" => "User fetched successfully",
+            "data" => $user
+        ]);
     }
-    
+
+
     // user edit
-    public static function editUser() {
+    public static function editUser()
+    {
 
         $conn = Database::connect();
-        $user_id = (int)(Request::input("user_id") ?? 0);
+        $user_id = (int) (Request::input("user_id") ?? 0);
         $display_name = trim(Request::input("display_name") ?? "");
         $email = trim(Request::input("email") ?? "");
         $bio = trim(Request::input("bio") ?? "");
         $profile_image = trim(Request::input("profile_image") ?? "");
         $cover_image = trim(Request::input("cover_image") ?? "");
         $phone_number = trim(Request::input("phone_number") ?? "");
-        
+
 
         // Check user exists
         $sql = "SELECT * FROM users WHERE user_id = ?";
@@ -174,7 +202,7 @@ WHERE u.username = ?
         // =====================================
         // NORMAL PROFILE UPDATES
         // =====================================
-        
+
 
         if (!empty($display_name)) {
             $updates[] = "display_name = ?";
@@ -206,7 +234,7 @@ WHERE u.username = ?
             $params[] = $phone_number;
             $types .= "s";
         }
-        
+
 
         // Nothing to update
         if (empty($updates)) {
@@ -217,7 +245,7 @@ WHERE u.username = ?
             return;
         }
 
-        
+
         $params[] = $user_id;
         $types .= "i";
 
@@ -240,8 +268,9 @@ WHERE u.username = ?
         }
     }
     //request Password OTP
-    public static function requestPasswordOTP() {
-        $user_id=(int)(Request::input("user_id")?? 0);
+    public static function requestPasswordOTP()
+    {
+        $user_id = (int) (Request::input("user_id") ?? 0);
         $conn = Database::connect();
 
         // Check user exists
@@ -285,15 +314,16 @@ WHERE u.username = ?
     }
 
 
-    public static function changepassword() {
+    public static function changepassword()
+    {
 
         $conn = Database::connect();
-        $user_id = (int)(Request::input("user_id") ?? 0);
+        $user_id = (int) (Request::input("user_id") ?? 0);
         $current_password = trim(Request::input("current_password") ?? "");
         $new_password = trim(Request::input("new_password") ?? "");
         $otpcode = trim(Request::input("otpcode") ?? "");
 
-        
+
         if ($user_id <= 0) {
             Response::json([
                 "status" => false,
@@ -363,12 +393,13 @@ WHERE u.username = ?
             ], 500);
         }
     }
-    
+
     //deactivate user
-    public static function deactivateUser(){
+    public static function deactivateUser()
+    {
         $conn = Database::connect();
-        $user_id = (int)(Request::input("user_id") ?? 0);
-        $deactivate = (int)(Request::input("deactivate") ?? 0);
+        $user_id = (int) (Request::input("user_id") ?? 0);
+        $deactivate = (int) (Request::input("deactivate") ?? 0);
         if ($user_id <= 0) {
             Response::json([
                 "status" => false,
@@ -409,10 +440,11 @@ WHERE u.username = ?
     }
 
     //deleted account
-    public static function deletedAccount(){
+    public static function deletedAccount()
+    {
         $conn = Database::connect();
-        $user_id = (int)(Request::input("user_id") ?? 0);
-        $deleted_account = (int)(Request::input("deleted_account") ?? 0);
+        $user_id = (int) (Request::input("user_id") ?? 0);
+        $deleted_account = (int) (Request::input("deleted_account") ?? 0);
         if ($user_id <= 0) {
             Response::json([
                 "status" => false,

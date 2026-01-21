@@ -238,6 +238,10 @@ class SaveController
             $user = Auth::getUser();
             $user_id = $user["user_id"];
         } else {
+            Response::json([
+                "status" => false,
+                "message" => "Does not have access for this user."
+            ], 400);
             $sql = "SELECT * FROM users WHERE username = ?";
             $stmt = $conn->prepare($sql);
             $stmt->bind_param("s", $username);

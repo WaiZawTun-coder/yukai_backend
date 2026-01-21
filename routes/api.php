@@ -221,7 +221,7 @@ Router::add(
     "/api/comment-post",
     fn() =>
     PostController::commentPost(),
-    false
+    true
 );
 
 Router::add(
@@ -253,7 +253,7 @@ Router::add(
     "/api/edit-history",
     fn() =>
     PostController::editHistory(),
-    false
+    true
 );
 
 Router::add(
@@ -302,6 +302,8 @@ Router::add(
     true
 );
 
+Router::add("GET", "/api/get-following", fn() => FriendController::getFollowings(), true);
+
 Router::add(
     "POST",
     "/api/send-request",
@@ -347,7 +349,7 @@ Router::add(
     "/api/follow",
     fn() =>
     FriendController::followUser(),
-    false
+    true,
 );
 
 Router::add(
@@ -355,7 +357,7 @@ Router::add(
     "/api/unfollow",
     fn() =>
     FriendController::unfollowUser(),
-    false
+    true,
 );
 
 Router::add(
@@ -363,7 +365,7 @@ Router::add(
     "/api/block-user",
     fn() =>
     FriendController::blockUser(),
-    false
+    true,
 );
 
 Router::add(
@@ -371,7 +373,7 @@ Router::add(
     "/api/unblock",
     fn() =>
     FriendController::unblockUser(),
-    false
+    true,
 );
 
 Router::add(
@@ -379,7 +381,7 @@ Router::add(
     "/api/unfriend",
     fn() =>
     FriendController::unfriend(),
-    false
+    true
 );
 
 
