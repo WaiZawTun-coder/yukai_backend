@@ -19,14 +19,17 @@ class SearchController
         $conn = Database::connect();
         $authUser = Auth::getUser();
         $user_id = $authUser["user_id"];
-        // $user_id = (int)(Request::input("user_id")?? 0);
 
-
-        // $keyword = trim(Request::input("keyword") ?? "");
         $keyword = trim($_GET["keyword"] ?? "");
         $page = max(1, (int) ($_GET['page'] ?? 1));
         $limit = 5;
         $offset = ($page - 1) * $limit;
+
+        // ✅ Type filtering (all | users | posts)
+        $type = strtolower(trim($_GET["type"] ?? "all"));
+        if (!in_array($type, ["all", "users", "posts"])) {
+            $type = "all";
+        }
 
         if ($keyword === '') {
             Response::json([
@@ -38,6 +41,7 @@ class SearchController
 
         $search_word = "%{$keyword}%";
 
+        // ✅ Keep response structure unchanged
         $data = [
             "users" => [
                 "page" => $page,
@@ -51,52 +55,56 @@ class SearchController
             ]
         ];
 
-
         /* =======================
            SEARCH USERS
         ======================= */
 
-        $sql = "
+        if ($type === "all" || $type === "users") {
+
+            $sql = "
             SELECT u.user_id, u.username, u.display_name, u.profile_image, u.gender
             FROM users u
             WHERE u.display_name LIKE ?
             AND is_active = 1
             AND NOT EXISTS (
-            SELECT 1
-            FROM blocks b
-            WHERE b.status = 1 AND (
-                (b.blocker_user_id = ? AND b.blocked_user_id = u.user_id)
-                OR
-                (b.blocker_user_id = u.user_id AND b.blocked_user_id = ?)
+                SELECT 1
+                FROM blocks b
+                WHERE b.status = 1 AND (
+                    (b.blocker_user_id = ? AND b.blocked_user_id = u.user_id)
+                    OR
+                    (b.blocker_user_id = u.user_id AND b.blocked_user_id = ?)
+                )
             )
-        )
             LIMIT ? OFFSET ?
         ";
 
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("siiii", $search_word, $user_id, $user_id, $limit, $offset);
-        $stmt->execute();
-        $users_result = $stmt->get_result();
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("siiii", $search_word, $user_id, $user_id, $limit, $offset);
+            $stmt->execute();
+            $users_result = $stmt->get_result();
 
-        $totalUsers = self::userCountByKeyword($search_word, $user_id);
-        $userTotalPages = ceil($totalUsers / $limit);
-        $data["users"]["total_pages"] = $userTotalPages;
+            $totalUsers = self::userCountByKeyword($search_word, $user_id);
+            $userTotalPages = ceil($totalUsers / $limit);
+            $data["users"]["total_pages"] = $userTotalPages;
 
-        while ($user = $users_result->fetch_assoc()) {
-            $data["users"]["data"][] = [
-                "user_id" => $user["user_id"],
-                "display_name" => $user["display_name"],
-                "username" => $user["username"],
-                "profile_image" => $user["profile_image"],
-                "gender" => $user["gender"]
-            ];
+            while ($user = $users_result->fetch_assoc()) {
+                $data["users"]["data"][] = [
+                    "user_id" => $user["user_id"],
+                    "display_name" => $user["display_name"],
+                    "username" => $user["username"],
+                    "profile_image" => $user["profile_image"],
+                    "gender" => $user["gender"]
+                ];
+            }
         }
 
         /* =======================
            SEARCH POSTS (PUBLIC) AND Friend Posts
         ======================= */
 
-        $sql = "
+        if ($type === "all" || $type === "posts") {
+
+            $sql = "
             SELECT 
                 p.post_id,
                 p.creator_user_id,
@@ -169,53 +177,49 @@ class SearchController
             LIMIT ? OFFSET ?
         ";
 
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param(
-            "isiiiiii",
-            $user_id,
-            $search_word,
-            $user_id,
-            $user_id,
-            $user_id,
-            $user_id,
-            $limit,
-            $offset
-        );
-        $stmt->execute();
-
-        $posts_result = $stmt->get_result();
-
-        $posts = [];
-
-        while ($row = $posts_result->fetch_assoc()) {
-
-            $row["creator"] = [
-                "id" => $row["creator_user_id"],
-                "display_name" => $row["display_name"],
-                "gender" => $row["gender"],
-                "profile_image" => $row["profile_image"]
-            ];
-
-            unset(
-                $row["display_name"],
-                $row["gender"],
-                $row["profile_image"]
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param(
+                "isiiiiii",
+                $user_id,
+                $search_word,
+                $user_id,
+                $user_id,
+                $user_id,
+                $user_id,
+                $limit,
+                $offset
             );
+            $stmt->execute();
 
-            $row["attachments"] = [];
-            $posts[$row["post_id"]] = $row;
+            $posts_result = $stmt->get_result();
+            $posts = [];
+
+            while ($row = $posts_result->fetch_assoc()) {
+
+                $row["creator"] = [
+                    "id" => $row["creator_user_id"],
+                    "display_name" => $row["display_name"],
+                    "gender" => $row["gender"],
+                    "profile_image" => $row["profile_image"]
+                ];
+
+                unset(
+                    $row["display_name"],
+                    $row["gender"],
+                    $row["profile_image"]
+                );
+
+                $row["attachments"] = [];
+                $posts[$row["post_id"]] = $row;
+            }
+
+            PostController::attachAttachments($conn, $posts);
+
+            $totalPosts = self::postCountByKeywords($search_word, $user_id);
+            $totalPostPages = ceil($totalPosts / $limit);
+            $data["posts"]["total_pages"] = $totalPostPages;
+            $data["posts"]["data"] = array_values($posts);
         }
-
-        PostController::attachAttachments($conn, $posts);
-
-        // $data["posts"] = array_values($posts);
-
-
-        $totalPosts = self::postCountByKeywords($search_word, $user_id);
-        $totalPostPages = ceil($totalPosts / $limit);
-        $data["posts"]["total_pages"] = $totalPostPages;
-        $data["posts"]["data"] = array_values($posts);
-
 
         /* =======================
            RESPONSE
@@ -224,10 +228,10 @@ class SearchController
         Response::json([
             "status" => true,
             "keyword" => $keyword,
-
             "data" => $data
         ]);
     }
+
 
     private static function postCountByKeywords($search_word, $user_id)
     {

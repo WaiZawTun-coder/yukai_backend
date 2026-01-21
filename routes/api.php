@@ -178,7 +178,7 @@ Router::add(
 
 Router::add(
     "GET",
-    "/api/get-post-by-postId",
+    "/api/get-post",
     fn() =>
     PostController::getPostsByPostId(),
     true

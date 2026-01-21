@@ -670,11 +670,9 @@ LIMIT ? OFFSET ?;
             // =============================
             // Insert post
             // =============================
-            $sql = "
-                    INSERT INTO posts 
+            $sql = "INSERT INTO posts 
                     (creator_user_id, content, privacy, shared_post_id, is_draft, is_archived, is_deleted, is_shared, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, 0, ?, NOW())
-        ";
+                    VALUES (?, ?, ?, ?, ?, ?, 0, ?, NOW())";
 
             $is_shared = $shared_post_id ? 1 : 0;
 
@@ -737,62 +735,60 @@ LIMIT ? OFFSET ?;
             // Commit transaction
             $conn->commit();
 
-            $sql = "
-        SELECT 
-    p.post_id,
-    p.creator_user_id,
-    p.shared_post_id,
-    p.privacy,
-    p.content,
-    p.is_archived,
-    p.is_draft,
-    p.is_deleted,
-    p.is_shared,
-    p.created_at,
-    p.updated_at,
+            $sql = "SELECT 
+                        p.post_id,
+                        p.creator_user_id,
+                        p.shared_post_id,
+                        p.privacy,
+                        p.content,
+                        p.is_archived,
+                        p.is_draft,
+                        p.is_deleted,
+                        p.is_shared,
+                        p.created_at,
+                        p.updated_at,
 
-    u.display_name,
-    u.gender,
-    u.profile_image,
-    u.username,
+                        u.display_name,
+                        u.gender,
+                        u.profile_image,
+                        u.username,
 
-    COUNT(DISTINCT r.post_react_id) AS react_count,
-    COUNT(DISTINCT c.post_comment_id) AS comment_count,
+                        COUNT(DISTINCT r.post_react_id) AS react_count,
+                        COUNT(DISTINCT c.post_comment_id) AS comment_count,
 
-    CASE 
-        WHEN COUNT(ur.post_react_id) > 0 THEN 1
-        ELSE 0
-    END AS is_liked,
+                        CASE 
+                            WHEN COUNT(ur.post_react_id) > 0 THEN 1
+                            ELSE 0
+                        END AS is_liked,
 
-    MAX(ur.reaction) AS reaction
+                        MAX(ur.reaction) AS reaction
 
-FROM posts p
-JOIN users u 
-    ON u.user_id = p.creator_user_id
+                    FROM posts p
+                    JOIN users u 
+                        ON u.user_id = p.creator_user_id
 
-LEFT JOIN post_reacts r 
-    ON r.post_id = p.post_id
+                    LEFT JOIN post_reacts r 
+                        ON r.post_id = p.post_id
 
-LEFT JOIN post_comments c 
-    ON c.post_id = p.post_id
+                    LEFT JOIN post_comments c 
+                        ON c.post_id = p.post_id
 
-LEFT JOIN post_reacts ur 
-    ON ur.post_id = p.post_id
-   AND ur.user_id = ?
+                    LEFT JOIN post_reacts ur 
+                        ON ur.post_id = p.post_id
+                       AND ur.user_id = ?
 
-WHERE 
-    p.post_id = ?
-    AND p.is_deleted = 0
-    AND (
-        p.privacy = 'public'
-        OR p.creator_user_id = ?
-    )
+                    WHERE 
+                        p.post_id = ?
+                        AND p.is_deleted = 0
+                        AND (
+                            p.privacy = ?
+                            OR p.creator_user_id = ?
+                        )
 
-GROUP BY p.post_id
-    ";
+                    GROUP BY p.post_id";
 
             $stmt = $conn->prepare($sql);
-            $stmt->bind_param("iii", $user_id, $post_id, $user_id);
+            $stmt->bind_param("iisi", $user_id, $post_id, $privacy, $user_id);
             $stmt->execute();
 
             $result = $stmt->get_result();
