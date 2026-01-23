@@ -10,6 +10,7 @@ use App\Controllers\SaveController;
 use App\Controllers\ChatController;
 use App\Controllers\MessageController;
 use App\Controllers\SearchController;
+use App\Controllers\ReportController;
 use App\Core\Auth;
 
 /*
@@ -569,7 +570,7 @@ Router::add(
 |--------------------------------------------------------------------------
 */
 
-<<<<<<< HEAD
+
 Router::add("GET", "/api/get-saved-posts/{list_id}", function ($list_id) {
     SaveController::getSavedPosts($list_id);
 }, true); // get Saved Posts
@@ -646,12 +647,12 @@ Router::add("POST", "/api/search", function () {
 }, true); // search 
 //chatting
 Router::add("POST", "/api/Chatting", function () {
-    ChattingController::privateChat();
+    ChatController::privateChat();
 }, false); 
-Router::add("POST","api/auth/2factors",function(){
+Router::add("POST","/api/auth/2factors",function(){
     AuthController::twoFactorAuthentication();
 },false);
-=======
+
 Router::add(
     "POST",
     "/api/register-device",
@@ -659,7 +660,7 @@ Router::add(
     DeviceController::registerDevice(),
     true
 );
->>>>>>> 094eac0e17e8e2dee7a1fc8cf10760d128f7adf8
+
 
 Router::add(
     "GET",
@@ -668,3 +669,11 @@ Router::add(
     DeviceController::getPublicKeys(),
     true
 );
+//reportController
+ Router::add(
+    "POST",
+    "/api/reportPost",
+    fn()=>
+    ReportController::reportPost(),
+    false
+ );
