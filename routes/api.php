@@ -7,10 +7,14 @@ use App\Controllers\PostController;
 use App\Controllers\PostHidingController;
 use App\Controllers\UserController;
 use App\Controllers\SaveController;
+use App\Controllers\SearchController;
 use App\Controllers\ChatController;
 use App\Controllers\MessageController;
+<<<<<<< HEAD
 use App\Controllers\SearchController;
 use App\Controllers\ReportController;
+=======
+>>>>>>> 76e7e929b4513f7b0bf04b4d4b12f22bd6dbfb0a
 use App\Core\Auth;
 
 /*
@@ -179,7 +183,7 @@ Router::add(
 
 Router::add(
     "GET",
-    "/api/get-post-by-postId",
+    "/api/get-post",
     fn() =>
     PostController::getPostsByPostId(),
     true
@@ -222,7 +226,7 @@ Router::add(
     "/api/comment-post",
     fn() =>
     PostController::commentPost(),
-    false
+    true
 );
 
 Router::add(
@@ -254,7 +258,7 @@ Router::add(
     "/api/edit-history",
     fn() =>
     PostController::editHistory(),
-    false
+    true
 );
 
 Router::add(
@@ -303,6 +307,8 @@ Router::add(
     true
 );
 
+Router::add("GET", "/api/get-following", fn() => FriendController::getFollowings(), true);
+
 Router::add(
     "POST",
     "/api/send-request",
@@ -348,7 +354,7 @@ Router::add(
     "/api/follow",
     fn() =>
     FriendController::followUser(),
-    false
+    true,
 );
 
 Router::add(
@@ -356,7 +362,7 @@ Router::add(
     "/api/unfollow",
     fn() =>
     FriendController::unfollowUser(),
-    false
+    true,
 );
 
 Router::add(
@@ -364,7 +370,7 @@ Router::add(
     "/api/block-user",
     fn() =>
     FriendController::blockUser(),
-    false
+    true,
 );
 
 Router::add(
@@ -372,7 +378,7 @@ Router::add(
     "/api/unblock",
     fn() =>
     FriendController::unblockUser(),
-    false
+    true,
 );
 
 Router::add(
@@ -380,7 +386,7 @@ Router::add(
     "/api/unfriend",
     fn() =>
     FriendController::unfriend(),
-    false
+    true
 );
 
 
@@ -446,7 +452,7 @@ Router::add(
 */
 
 Router::add(
-    "POST",
+    "GET",
     "/api/search",
     fn() =>
     SearchController::search(),
@@ -524,7 +530,7 @@ Router::add(
 */
 
 Router::add(
-    "POST",
+    "GET",
     "/api/chat/get-messages",
     fn() =>
     MessageController::getMessages(),
