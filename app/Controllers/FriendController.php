@@ -73,6 +73,76 @@ class FriendController
         ]);
     }
 
+    public static function getFollowings()
+    {
+        $conn = Database::connect();
+        $user = Auth::getUser();
+        $user_id = (int) $user["user_id"];
+
+        [$page, $limit, $offset] = self::getPageParams();
+
+        /* =====================
+           COUNT FOLLOWINGS
+        ===================== */
+
+        $countSql = "
+        SELECT COUNT(*) AS total
+        FROM follows f
+        WHERE f.follower_user_id = ?
+        AND f.status = 1
+    ";
+
+        $countStmt = $conn->prepare($countSql);
+        $countStmt->bind_param("i", $user_id);
+        $countStmt->execute();
+        $total = (int) $countStmt->get_result()->fetch_assoc()["total"];
+        $total_pages = ceil($total / $limit);
+
+        /* =====================
+           GET FOLLOWINGS LIST
+        ===================== */
+
+        $sql = "
+        SELECT 
+            u.user_id,
+            u.username,
+            u.display_name,
+            u.gender,
+            u.profile_image
+        FROM follows f
+        JOIN users u 
+            ON u.user_id = f.following_user_id
+        WHERE f.follower_user_id = ?
+        AND f.status = 1
+        ORDER BY u.display_name ASC
+        LIMIT ? OFFSET ?
+    ";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("iii", $user_id, $limit, $offset);
+        $stmt->execute();
+
+        $result = $stmt->get_result();
+        $followings = [];
+
+        while ($row = $result->fetch_assoc()) {
+            $followings[] = $row;
+        }
+
+        /* =====================
+           RESPONSE
+        ===================== */
+
+        Response::json([
+            "status" => true,
+            "page" => $page,
+            "total_pages" => $total_pages,
+            "total" => $total,
+            "data" => $followings
+        ]);
+    }
+
+
 
     public static function sendFriendRequest()
     {
@@ -483,40 +553,78 @@ class FriendController
     {
         $conn = Database::connect();
         $input = Request::json();
-        $follower_id = (int) ($input['follower_id'] ?? 0); // login user
+        $user = Auth::getUser();
+
+        $follower_id = (int) $user["user_id"];   // logged-in user
         $following_id = (int) ($input['following_id'] ?? 0);
 
-
-        if ($follower_id === 0 || $following_id === 0 || $follower_id == $following_id) {
+        if ($follower_id === 0 || $following_id === 0 || $follower_id === $following_id) {
             Response::json([
                 "status" => false,
-                "message" => "Invalid Follower"
-            ]);
+                "message" => "Invalid follow request"
+            ], 400);
+            return;
         }
 
-        $checkSql = "SELECT follow_id from follows where(follower_user_id=? AND following_user_id=?)";
-        $followingCheck = $conn->prepare("$checkSql");
-        $followingCheck->bind_param("ii", $follower_id, $following_id);
-        $followingCheck->execute();
-        Response::json([
-            "status" => false,
-            "message" => "Already follow this user"
-        ]);
+        // Check existing follow record
+        $checkSql = "
+        SELECT follow_id, status 
+        FROM follows 
+        WHERE follower_user_id = ? 
+          AND following_user_id = ?
+        LIMIT 1
+    ";
 
-        $followerSql = "INSERT INTO follows(follower_user_id,following_user_id) values(?,?)";
-        $follower = $conn->prepare($followerSql);
-        $follower->bind_param("ii", $follower_id, $following_id);
-        $follower->execute();
+        $stmt = $conn->prepare($checkSql);
+        $stmt->bind_param("ii", $follower_id, $following_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        if ($result->num_rows > 0) {
+            $row = $result->fetch_assoc();
+
+            // Already following
+            if ((int) $row["status"] === 1) {
+                Response::json([
+                    "status" => false,
+                    "message" => "Already following this user"
+                ], 409);
+                return;
+            }
+
+            // Reactivate follow
+            $updateSql = "
+            UPDATE follows 
+            SET status = 1 
+            WHERE follow_id = ?
+        ";
+            $updateStmt = $conn->prepare($updateSql);
+            $updateStmt->bind_param("i", $row["follow_id"]);
+            $updateStmt->execute();
+
+        } else {
+            // Insert new follow
+            $insertSql = "
+            INSERT INTO follows (follower_user_id, following_user_id, status)
+            VALUES (?, ?, 1)
+        ";
+            $insertStmt = $conn->prepare($insertSql);
+            $insertStmt->bind_param("ii", $follower_id, $following_id);
+            $insertStmt->execute();
+        }
+
         Response::json([
             "status" => true,
-            "message" => "Following request sent"
+            "message" => "Followed user successfully"
         ]);
     }
+
     public static function unfollowUser()
     {
         $conn = Database::connect();
         $input = Request::json();
-        $follower_id = (int) ($input['follower_id'] ?? 0); // login user
+        $user = Auth::getUser();
+        $follower_id = $user["user_id"];// login user
         $following_id = (int) ($input['following_id'] ?? 0);
 
         if ($follower_id === $following_id) {
@@ -539,7 +647,8 @@ class FriendController
     {
         $conn = Database::connect();
         $input = Request::json();
-        $blocker_User = (int) ($input['blocker_user_id'] ?? 0);//login user
+        $user = Auth::getUser();
+        $blocker_User = $user["user_id"];//login user
         $blocked_User = (int) ($input['blocked_user_id'] ?? 0);
         //self block
         if ($blocker_User === $blocked_User || $blocked_User === 0 || $blocker_User === 0) {
@@ -617,17 +726,18 @@ class FriendController
     {
         $conn = Database::connect();
         $input = Request::json();
-        $user_1_id = (int) ($input['user_1_id'] ?? 0);
-        $user_2_id = (int) ($input['user_2_id'] ?? 0);
-        if ($user_1_id === $user_2_id || $user_1_id === 0 || $user_2_id === 0) {
+        $user = Auth::getUser();
+        $me = $user["user_id"];
+        $target_id = (int) ($input['target_id'] ?? 0);
+        if ($me === $target_id || $me === 0 || $target_id === 0) {
             Response::json([
                 "status" => false,
                 "message" => "invalid user"
             ]);
         }
-        $unfriendSql = "DELETE FROM friends WHERE user_1_id=? and user_2_id=? AND status='accepted'";
+        $unfriendSql = "DELETE FROM friends WHERE ((user_1_id=? and user_2_id=?) OR (user_1_id=? AND user_2_id=?)) AND status='accepted'";
         $unfriend = $conn->prepare($unfriendSql);
-        $unfriend->bind_param("ii", $user_1_id, $user_2_id);
+        $unfriend->bind_param("iiii", $me, $target_id, $target_id, $me);
         $unfriend->execute();
         if ($unfriend->affected_rows > 0) {
             Response::json([
