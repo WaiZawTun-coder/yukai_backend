@@ -70,5 +70,64 @@ class ReportController{
 
        
     }
+    public static function reported_acc(){
+        $conn=Database::connect();
+        $input=Request::json();
+        $reporter_user_id=(int)($input['reporter_user']?? 0);
+        $reported_user_id=(int)($input['reported_user']?? 0);
+        $type=trim($input['type']?? '');
+        $description=trim($input['description']?? '');
+        // $status = (string) ($input['status'] ?? '');
+        $allowedType=[
+            'fake_account',
+            'harassment',
+            'spam',
+            'impersonation',
+            'other'];
+
+        if(!in_array($type,$allowedType)){
+            Response::json([
+                "status"=>false,
+                "message"=>"Invalid report type"
+            ]);
+        }
+         if($reporter_user_id<=0 || $reported_user_id<=0){
+            Response::json([
+                "status"=>false,
+                "message"=>"Invalid input"
+            ]);
+            return;
+        }
+        //cannot report yourself
+        if($reporter_user_id===$reported_user_id){
+            Response::json([
+                "status"=>false,
+                "message"=>"You cannot report yourself"
+            ]);
+        }
+    
+        //check users exist
+        $checkUsers=$conn->prepare("SELECT user_id from users WHERE user_id in(? ,?)");
+        $checkUsers->bind_param("ii",$reporter_user_id,$reported_user_id);
+        $checkUsers->execute();
+        $checkUsers->store_result();
+        if($checkUsers->num_rows!==2){
+            Response::json([
+                "status"=>false,
+                "message"=>"Invalid input:users do not exists"
+            ]);
+            return;
+        }
+        
+        $insertReported_accSql="INSERT INTO reported_acc (reporter_user_id, reported_user_id,type,description) VALUES(?,?,?,?)";
+        $insertReported=$conn->prepare($insertReported_accSql);
+        $insertReported->bind_param("iiss",$reporter_user_id,$reported_user_id,$type,$description);
+        $insertReported->execute();
+        Response::json([
+            "status"=>true,
+            "message"=>"acc reported successfully"
+        ]);
+
+    }
     
 }

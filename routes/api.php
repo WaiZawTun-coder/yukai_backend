@@ -10,11 +10,10 @@ use App\Controllers\SaveController;
 use App\Controllers\SearchController;
 use App\Controllers\ChatController;
 use App\Controllers\MessageController;
-<<<<<<< HEAD
-use App\Controllers\SearchController;
+
 use App\Controllers\ReportController;
-=======
->>>>>>> 76e7e929b4513f7b0bf04b4d4b12f22bd6dbfb0a
+
+
 use App\Core\Auth;
 
 /*
@@ -681,5 +680,12 @@ Router::add(
     "/api/reportPost",
     fn()=>
     ReportController::reportPost(),
+    false
+ );
+ Router::add(
+    "POST",
+    "/api/reportAcc",
+    fn()=>
+    ReportController::reported_acc(),
     false
  );

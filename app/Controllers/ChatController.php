@@ -1,11 +1,10 @@
 <?php
-<<<<<<< HEAD
-namespace App\Controllers;
-=======
+
+
 
 namespace App\Controllers;
 
->>>>>>> 76e7e929b4513f7b0bf04b4d4b12f22bd6dbfb0a
+
 use App\Core\Auth;
 use App\Core\Database;
 use App\Core\Request;
