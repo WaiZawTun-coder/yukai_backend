@@ -10,7 +10,13 @@ use App\Controllers\SaveController;
 use App\Controllers\SearchController;
 use App\Controllers\ChatController;
 use App\Controllers\MessageController;
+<<<<<<< HEAD
+use App\Controllers\SearchController;
+use App\Controllers\reportController;
+=======
+>>>>>>> 76e7e929b4513f7b0bf04b4d4b12f22bd6dbfb0a
 use App\Core\Auth;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -284,6 +290,40 @@ Router::add(
     "/api/unhide-post",
     fn() =>
     PostHidingController::unhidePost(),
+    true
+);
+/*
+|--------------------------------------------------------------------------
+| Post Tag
+|--------------------------------------------------------------------------
+*/
+
+Router::add(
+    "POST",
+    "/api/tag-post",
+    fn() =>
+    PostController::tagPost(),
+    true
+);
+Router::add(
+    "GET",
+    "/api/update-tag-post",
+    fn() =>
+    PostController::updateTagPost(),
+    true
+);
+Router::add(
+    "GET",
+    "/api/delete-tag-post",
+    fn() =>
+    PostController::deleteTagPost(),
+    true
+);
+Router::add(
+    "GET",
+    "/api/get-tag-post",
+    fn() =>
+    PostController::getTagPost(),
     true
 );
 
@@ -585,4 +625,12 @@ Router::add(
     fn() =>
     DeviceController::getPublicKeys(),
     true
+);
+//report post
+Router::add(
+    "POST",
+    "/api/reportPost",
+    fn()=>
+    ReportController::reportPost(),
+    false
 );
