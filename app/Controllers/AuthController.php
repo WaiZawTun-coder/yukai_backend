@@ -74,6 +74,7 @@ class AuthController
                 "status" => false,
                 "message" => "Username and Password required"
             ], 400);
+            return;
         }
 
         $sql = "SELECT * FROM users 
@@ -90,6 +91,7 @@ class AuthController
                 "status" => false,
                 "message" => "Account not found"
             ], 404);
+            return;
         }
 
         $user = $result->fetch_assoc();
@@ -99,6 +101,7 @@ class AuthController
                 "status" => false,
                 "message" => "Banned account"
             ], 403);
+            return;
         }
 
         if (!PasswordService::verify($password, $user['password'])) {
@@ -106,50 +109,86 @@ class AuthController
                 "status" => false,
                 "message" => "Incorrect password"
             ], 401);
+            return;
         }
-
-        // Generate tokens
-        $accessToken = TokenService::generateAccessToken(["user_id" => $user['user_id'], "username" => $user["username"]]);
-        [$refreshToken, $refreshHash] = TokenService::generateRefreshToken();
-
-        $expireAt = date("Y-m-d H:i:s", time() + 60 * 60 * 24 * 7);
-
-        $update = $conn->prepare("
-            UPDATE users 
-            SET refresh_token = ?, refresh_token_expire_time = ?
-            WHERE user_id = ?
-        ");
-        $update->bind_param("ssi", $refreshHash, $expireAt, $user['user_id']);
-        $update->execute();
-
-        $isSecure =
-            (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-            || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
-
-
-        setcookie("refresh_token", $refreshToken, [
-            "expires" => time() + 60 * 60 * 24 * 7,
-            "path" => "/",
-            "secure" => $isSecure,
-            "httponly" => true,
-            "samesite" => $isSecure ? "None" : "Lax"
+        if((int)$user['is_2fa'] === 1){
+            $otpCode=self::generateOTP($user['user_id']);
+            if(!$otpCode){
+               Response::json([
+                  "status"=>false,
+                  "message"=>"Failed to generate OTP"
         ]);
+        return;
+       }
+        
+       
+       //send otp via email
+       self::sendEmail($user['email'],$otpCode);
+       // 🔑 STEP 2: Generate PARTIAL access token
+    $accessToken = TokenService::generateAccessToken([
+        "user_id" => $user['user_id'],
+        "username" => $user['username'],
+        "two_factor_verified" => false
+    ]);
+
+    //  Do NOT issue refresh token yet
+
+    Response::json([
+        "status" => true,
+        "two_factor_required" => true,
+        "message" => "OTP sent to your email",
+        "data" => [
+            "user_id" => $user['user_id'],
+            "access_token" => $accessToken
+        ]
+    ]);
+        }
+    return;
+
+
+
+        // // Generate tokens
+        // $accessToken = TokenService::generateAccessToken(["user_id" => $user['user_id'], "username" => $user["username"]]);
+        // [$refreshToken, $refreshHash] = TokenService::generateRefreshToken();
+
+        // $expireAt = date("Y-m-d H:i:s", time() + 60 * 60 * 24 * 7);
+
+        // $update = $conn->prepare("
+        //     UPDATE users 
+        //     SET refresh_token = ?, refresh_token_expire_time = ?
+        //     WHERE user_id = ?
+        // ");
+        // $update->bind_param("ssi", $refreshHash, $expireAt, $user['user_id']);
+        // $update->execute();
+
+        // $isSecure =
+        //     (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        //     || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
+
+
+        // setcookie("refresh_token", $refreshToken, [
+        //     "expires" => time() + 60 * 60 * 24 * 7,
+        //     "path" => "/",
+        //     "secure" => $isSecure,
+        //     "httponly" => true,
+        //     "samesite" => $isSecure ? "None" : "Lax"
+        // ]);
 
         // BLOCK INCOMPLETE REGISTRATION
-        if ((int) $user['completed_step'] < 2) {
-            Response::json([
-                "status" => true,
-                "incomplete" => true,
-                "message" => "Registration not completed",
-                "data" => [
-                    "user_id" => $user["user_id"],
-                    "username" => $user["username"],
-                    "email" => $user["email"],
-                    "completed_step" => $user["completed_step"],
-                    "access_token" => $accessToken
-                ]
-            ]);
-        }
+        // if ((int) $user['completed_step'] < 2) {
+        //     Response::json([
+        //         "status" => true,
+        //         "incomplete" => true,
+        //         "message" => "Registration not completed",
+        //         "data" => [
+        //             "user_id" => $user["user_id"],
+        //             "username" => $user["username"],
+        //             "email" => $user["email"],
+        //             "completed_step" => $user["completed_step"],
+        //             // "access_token" => $accessToken
+        //         ]
+        //     ]);
+        // }
 
         Response::json([
             "status" => true,
@@ -717,5 +756,40 @@ class AuthController
     public static function profile()
     {
         echo json_encode(["message" => "profile"]);
+    }
+    
+    public static function twoFactorAuthentication(){
+        $conn=Database::connect();
+        $input=Request::json();
+        $user_id=(int)($input['user_id']?? 0);
+        $otpcode=trim($input['otp_code']?? "");
+        if(!$user_id || $otpcode===""){
+            Response::json([
+                "status"=>false,
+                "message"=>"user_id and otp code is required"
+            ]);
+        }
+        if(!self::verifyOTP($user_id,$otpcode)){
+            Response::json([
+                "status"=>false,
+                "message"=>"Invalid input"
+            ]);
+        }
+        $stmt = $conn->prepare("SELECT * FROM users WHERE user_id = ?");
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $user = $stmt->get_result()->fetch_assoc();
+
+        if (!$user) {
+           Response::json([
+              "status" => false,
+              "message" => "User not found"
+        ], 404);
+    }
+
+    // OTP verified → issue tokens
+    // self::issueTokens($user);
+
+        
     }
 }
