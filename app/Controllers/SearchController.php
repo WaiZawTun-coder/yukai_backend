@@ -65,11 +65,11 @@ class SearchController
             SELECT u.user_id, u.username, u.display_name, u.profile_image, u.gender
             FROM users u
             WHERE u.display_name LIKE ?
-            AND is_active = 1
+            AND is_active = 1 AND u.user_id != ?
             AND NOT EXISTS (
                 SELECT 1
                 FROM blocks b
-                WHERE b.status = 1 AND (
+                WHERE b.status = 1  AND (
                     (b.blocker_user_id = ? AND b.blocked_user_id = u.user_id)
                     OR
                     (b.blocker_user_id = u.user_id AND b.blocked_user_id = ?)
@@ -79,7 +79,7 @@ class SearchController
         ";
 
             $stmt = $conn->prepare($sql);
-            $stmt->bind_param("siiii", $search_word, $user_id, $user_id, $limit, $offset);
+            $stmt->bind_param("siiiii", $search_word, $user_id, $user_id, $user_id, $limit, $offset);
             $stmt->execute();
             $users_result = $stmt->get_result();
 
