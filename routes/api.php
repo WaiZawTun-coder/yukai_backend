@@ -10,11 +10,8 @@ use App\Controllers\SaveController;
 use App\Controllers\SearchController;
 use App\Controllers\ChatController;
 use App\Controllers\MessageController;
-<<<<<<< HEAD
-use App\Controllers\SearchController;
+use App\Controllers\ReportController;
 use App\Controllers\reportController;
-=======
->>>>>>> 76e7e929b4513f7b0bf04b4d4b12f22bd6dbfb0a
 use App\Core\Auth;
 
 
@@ -611,6 +608,89 @@ Router::add(
 |--------------------------------------------------------------------------
 */
 
+
+Router::add("GET", "/api/get-saved-posts/{list_id}", function ($list_id) {
+    SaveController::getSavedPosts($list_id);
+}, true); // get Saved Posts
+
+Router::add("GET", "/api/update-saved-posts", function () {
+    SaveController::updateSavedPosts();
+}, true); // update saved posts
+
+Router::add("GET", "/api/delete-saved-posts", function () {
+    SaveController::deleteSavedPosts();
+}, true); 
+
+//friends
+Router::add("POST","/api/send-request", function(){
+    FriendController::sendFriendRequest();
+}, true);//send friend requent
+Router::add("POST","/api/response-request", function(){
+    FriendController::responseFriendRequest();
+},true);//accept,reject,cancel friend request
+Router::add("GET","/api/get-sent-requests",function(){
+    FriendController::getFriendRequest();
+},true);//get Friend Request
+Router::add("GET","/api/get-received-requests",function(){
+    FriendController::getReceivedRequests();
+},true);
+Router::add("GET","/api/get-people-you-may-know", function(){
+    FriendController::peopleYouMayKnow();
+},true);
+// delete saved posts
+
+// Router::add("POST", "/auth/generateOTP", function () {
+// AuthController::generateOTP();
+// }, true); // generate otp 
+
+// Router::add("POST", "/auth/verifyOTP", function () {
+// AuthController::verifyOTP();
+// }, true); // verify otp
+
+// Router::add("POST", "/auth/send-email", function () {
+// AuthController::sendEmail();
+// }, false); // send email
+
+//passwords
+Router::add("POST", "/auth/forget-password", function () {
+    AuthController::forgetPassword();
+}, true); // forget password
+
+Router::add("POST", "/auth/reset-password", function () {
+    AuthController::resetPassword();
+}, true); // reset password
+
+
+//followers
+Router::add("POST","/api/follow", function(){
+    FriendController::followUser();
+},false);
+Router::add("POST","/api/unfollow", function(){
+    FriendController::unfollowUser();
+},false);
+Router::add("POST","/api/block-user", function(){
+    FriendController::blockUser();
+},false);
+Router::add("POST","/api/unblock",function(){
+    FriendController::unblockUser();
+},false);
+Router::add("POST","/api/unfriend",function(){
+    FriendController::unfriend();
+},false);
+
+
+
+Router::add("POST", "/api/search", function () {
+    SearchController::search();
+}, true); // search 
+//chatting
+Router::add("POST", "/api/Chatting", function () {
+    ChatController::privateChat();
+}, false); 
+Router::add("POST","/api/auth/2factors",function(){
+    AuthController::twoFactorAuthentication();
+},false);
+
 Router::add(
     "POST",
     "/api/register-device",
@@ -618,6 +698,7 @@ Router::add(
     DeviceController::registerDevice(),
     true
 );
+
 
 Router::add(
     "GET",
@@ -633,4 +714,11 @@ Router::add(
     fn()=>
     ReportController::reportPost(),
     false
-);
+ );
+ Router::add(
+    "POST",
+    "/api/reportAcc",
+    fn()=>
+    ReportController::reported_acc(),
+    false
+ );
