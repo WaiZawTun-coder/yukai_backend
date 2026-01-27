@@ -42,6 +42,7 @@ require_once __DIR__ . "/../app/Controllers/SaveController.php";
 require_once __DIR__ . "/../app/Controllers/ChatController.php";
 require_once __DIR__ . "/../app/Controllers/MessageController.php";
 require_once __DIR__ . "/../app/Controllers/ReportController.php";
+require_once __DIR__ . "/../app/Controllers/AdminController.php";
 
 Router::dispatch();
 

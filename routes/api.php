@@ -1,5 +1,6 @@
 <?php
 
+use App\Controllers\AdminController;
 use App\Controllers\AuthController;
 use App\Controllers\DeviceController;
 use App\Controllers\FriendController;
@@ -687,5 +688,20 @@ Router::add(
     "/api/reportAcc",
     fn()=>
     ReportController::reported_acc(),
+    false
+ );
+ //Admin
+ Router::add(
+    "POST",
+    "/api/RegisterAdmin",
+    fn()=>
+    AdminController::AdminRegister(),
+    false
+ );
+ Router::add(
+    "POST",
+    "/api/AdminLogin",
+    fn()=>
+    AdminController::AdminLogin(),
     false
  );
