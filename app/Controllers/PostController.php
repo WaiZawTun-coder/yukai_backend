@@ -6,6 +6,7 @@ use App\Core\Database;
 use App\Core\Response;
 use App\Core\Request;
 use App\Service\ImageService;
+use Exception;
 
 class PostController
 {
@@ -41,10 +42,19 @@ class PostController
      * Get all posts
      * ===================================================== */
 
-    public static function getPosts()
-    {
-        $conn = Database::connect();
-        $user_id = (int) (Request::input("user_id") ?? 0);
+
+    public static function getPosts()  
+{
+    $conn = Database::connect();
+    $user_id = (int)(Request::input("user_id") ?? 0);
+    
+    // If no user_id provided in request, get from Auth
+    if ($user_id === 0) {
+        $user = Auth::getUser();
+        $user_id = $user?->user_id ?? 0;
+
+    
+
 
         // If no user_id provided in request, get from Auth
         if ($user_id === 0) {
@@ -152,9 +162,29 @@ class PostController
         $limit = 5;
         $offset = ($page - 1) * $limit;
 
-        // SQL query - FIXED syntax error
-        $sql = "
-    SELECT 
+
+        $totalPosts = self::getPostCount();
+        $totalPages = ceil($totalPosts / $limit);
+
+        Response::json([
+            "status" => true,
+            "page" => $page,
+            "totalPages" => $totalPages,
+            "data" => array_values($posts)
+        ]);
+
+    }
+
+    // Pagination
+    $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+    $limit = 5;
+    $offset = ($page - 1) * $limit;
+
+    // SQL query - FIXED syntax error
+    $sql = "
+
+        
+        SELECT 
         p.post_id,
         p.creator_user_id,
         p.shared_post_id,
@@ -850,21 +880,19 @@ LIMIT ? OFFSET ?;
         $post_id = (int) (Request::input("post_id") ?? 0);
 
 
-        $privacy = trim(Request::input("privacy") ?? 'public');
-        $is_deleted = (int) (Request::input("is_deleted") ?? 0);
-        $who_can_comment = trim(Request::input("who_can_comment") ?? "");
-        $who_can_react = trim(Request::input("who_can_react") ?? "");
-        $who_can_share = trim(Request::input("who_can_share") ?? "");
 
-        $content = trim(Request::input("content") ?? '');
-        $privacy = trim(Request::input("privacy") ?? 'public');
-        $is_deleted = (int) (Request::input("is_deleted") ?? 0);
+        $privacy =trim( Request::input("privacy") ?? 'public');
+        $is_deleted=(int)(Request::input("is_deleted") ?? 0);
+        $who_can_comment=trim(Request::input("who_can_comment")?? "");
+        $who_can_react=trim(Request::input("who_can_react")?? "");
+        $who_can_share=trim(Request::input("who_can_share")?? "");
 
+        
 
 
 
 
-        if ($post_id === 0) {
+        if ($post_id=== 0) {
             Response::json([
                 "status" => false,
                 "message" => "Invalid post"
@@ -1092,10 +1120,10 @@ GROUP BY p.post_id
         $conn = Database::connect();
         $creator_id = (int) (Request::input("creator_id") ?? 0);
         $post_id = (int) (Request::input("post_id") ?? 0);
-        $privacy = trim(Request::input("privacy") ?? 'public');
+        $privacy =trim( Request::input("privacy") ?? 'public');
+        
 
-
-        if ($post_id === 0) {
+        if ($post_id=== 0) {
             Response::json([
                 "status" => false,
                 "message" => "Invalid post"
@@ -1126,7 +1154,7 @@ GROUP BY p.post_id
 
             $stmt->execute();
 
-
+            
 
             // =============================
             // Handle post_attachments (optional)
@@ -1847,7 +1875,294 @@ GROUP BY p.post_id
 
     }
 
+    /* =====================================================
+    * Tag Post
+    * ===================================================== */
+    public static function tagPost() {
+        $conn = Database::connect();
+        $post_id = (int)(Request::input("post_id") ?? 0);
+        $tagged_user_ids = Request::input("tagged_user_id") ?? [];
 
+        //check the post or user
+        if ($post_id <= 0 || !is_array($tagged_user_ids) || empty($tagged_user_ids)) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid post or user"
+            ]);
+            return;
+        }
+
+        // Check if post exists
+        $sql = "SELECT post_id FROM posts WHERE post_id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $post_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        if ($result->num_rows === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Post is not found"
+            ]);
+            return;
+        }
+
+        $alreadyTagged = []; 
+
+        // Start transaction
+        $conn->begin_transaction();
+
+        try {
+            $insertStmt = $conn->prepare(
+                "INSERT INTO post_tags (post_id, tagged_user_id) VALUES (?, ?)"
+            );
+
+            $checkStmt = $conn->prepare(
+                "SELECT post_tag_id FROM post_tags WHERE post_id = ? AND tagged_user_id = ?"
+            );
+
+            foreach ($tagged_user_ids as $user_id) {
+                $user_id = (int)$user_id;
+                if ($user_id <= 0) continue;
+
+                // Check if already tagged
+                $checkStmt->bind_param("ii", $post_id, $user_id);
+                $checkStmt->execute();
+                $checkResult = $checkStmt->get_result();
+
+                if ($checkResult->num_rows > 0) {
+                    $alreadyTagged[] = $user_id;
+                    continue; // Skip inserting
+                }
+
+                // Insert tag
+                $insertStmt->bind_param("ii", $post_id, $user_id);
+                $insertStmt->execute();
+            }
+
+            $conn->commit();
+
+            if (!empty($alreadyTagged)) {
+                Response::json([
+                    "status" => false,
+                    "message" => "These users are already tagged: " . implode(", ", $alreadyTagged)
+                ]);
+            } else {
+                Response::json([
+                    "status" => true,
+                    "message" => "Users tagged successfully"
+                ]);
+            }
+
+        } catch (Exception $e) {
+            $conn->rollback();
+            Response::json([
+                "status" => false,
+                "message" => "Failed to tag users"
+            ]);
+        }
+    }
+
+    /* =====================================================
+    * Update Tag Post
+    * ===================================================== */
+    public static function updateTagPost() {
+        $conn = Database::connect();
+
+        $post_id = (int)(Request::input("post_id") ?? 0);
+        $tagged_user_ids = Request::input("tagged_user_id") ?? [];
+
+        // Validate input
+        if ($post_id <= 0 || !is_array($tagged_user_ids)) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid post or user"
+            ]);
+            return;
+        }
+
+        // Check if post exists
+        $stmt = $conn->prepare("SELECT post_id FROM posts WHERE post_id = ?");
+        $stmt->bind_param("i", $post_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        if ($result->num_rows === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Post not found"
+            ]);
+            return;
+        }
+
+        // Start transaction
+        $conn->begin_transaction();
+
+        try {
+            //remove already post tags
+            $deleteStmt = $conn->prepare(
+                "DELETE FROM post_tags WHERE post_id = ?"
+            );
+            $deleteStmt->bind_param("i", $post_id);
+            $deleteStmt->execute();
+
+            /**
+             * STEP 2: Insert new tags
+             */
+            $insertStmt = $conn->prepare(
+                "INSERT INTO post_tags (post_id, tagged_user_id) VALUES (?, ?)"
+            );
+
+            foreach ($tagged_user_ids as $user_id) {
+                $user_id = (int)$user_id;
+                if ($user_id <= 0) {
+                    continue;
+                }
+
+                $insertStmt->bind_param("ii", $post_id, $user_id);
+                $insertStmt->execute();
+            }
+
+            $conn->commit();
+
+            Response::json([
+                "status" => true,
+                "message" => "Post tags updated successfully"
+            ]);
+
+        } catch (Exception $e) {
+            $conn->rollback();
+            Response::json([
+                "status" => false,
+                "message" => "Failed to update post tags"
+            ]);
+        }
+    }
+
+
+    /* =====================================================
+    * Delete Tag Post
+    * ===================================================== */
+    public static function deleteTagPost() {
+        $conn = Database::connect();
+
+        $post_id = (int)(Request::input("post_id") ?? 0);
+        $tagged_user_id = (int)(Request::input("tagged_user_id") ?? 0);
+
+        // Validate input
+        if ($post_id <= 0 || $tagged_user_id<=0) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid  post or user"
+            ]);
+            return;
+        }
+
+        // Check if tag exists
+        $checkStmt = $conn->prepare(
+            "SELECT post_tag_id FROM post_tags WHERE post_id = ? and tagged_user_id=?"
+        );
+        $checkStmt->bind_param("ii", $post_id,$tagged_user_id);
+        $checkStmt->execute();
+        $result = $checkStmt->get_result();
+
+        if ($result->num_rows === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Tag post not found"
+            ]);
+            return;
+        }
+
+        // Delete tag
+        $deleteStmt = $conn->prepare(
+            "DELETE FROM post_tags WHERE post_id = ? and tagged_user_id=?"
+        );
+        $deleteStmt->bind_param("ii", $post_id,$tagged_user_id);
+        $deleteStmt->execute();
+
+        Response::json([
+            "status" => true,
+            "message" => "Tag removed successfully"
+        ]);
+    }
+
+    /* =====================================================
+    * Get Tag Post
+    * ===================================================== */
+    public static function getTagPost() {
+        $conn = Database::connect();
+
+        $post_id = (int)(Request::input("post_id") ?? 0);
+
+        $page  = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+        $limit = 5;
+        $offset = ($page - 1) * $limit;
+
+        if ($post_id <= 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid post id"
+            ]);
+            return;
+        }
+
+        // Check post exists
+        $stmt = $conn->prepare("SELECT post_id FROM posts WHERE post_id = ?");
+        $stmt->bind_param("i", $post_id);
+        $stmt->execute();
+
+        if ($stmt->get_result()->num_rows === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Post not found"
+            ]);
+            return;
+        }
+
+        // Get total tagged users
+        $countStmt = $conn->prepare(
+            "SELECT COUNT(*) AS total
+            FROM post_tags
+            WHERE post_id = ?"
+        );
+        $countStmt->bind_param("i", $post_id);
+        $countStmt->execute();
+        $total = (int)$countStmt->get_result()->fetch_assoc()['total'];
+
+        
+        $tagStmt = $conn->prepare(
+            "SELECT 
+                u.user_id,
+                u.username,
+                u.display_name
+            FROM post_tags pt
+            INNER JOIN users u ON u.user_id = pt.tagged_user_id
+            WHERE pt.post_id = ?
+            ORDER BY pt.post_tag_id DESC
+            LIMIT ? OFFSET ?"
+        );
+
+        $tagStmt->bind_param("iii", $post_id, $limit, $offset);
+        $tagStmt->execute();
+        $result = $tagStmt->get_result();
+
+        $users = [];
+        while ($row = $result->fetch_assoc()) {
+            $users[] = $row;
+        }
+
+        Response::json([
+            "status" => true,
+            "post_id" => $post_id,
+            "pagination" => [
+                "page" => $page,
+                "limit" => $limit,
+                "total" => $total,
+                "total_pages" => ceil($total / $limit)  
+            ],
+            "users" => $users
+        ]);
+    }
 
     /* =====================================================
      * Count helpers
@@ -1946,7 +2261,7 @@ GROUP BY p.post_id
               AND p.is_deleted = 0
               AND p.is_archived = 0
               AND hp.post_id IS NULL
-");
+    ");
 
         $stmt->bind_param("is", $current_user_id, $username);
         $stmt->execute();

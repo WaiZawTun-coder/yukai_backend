@@ -629,7 +629,7 @@ class AuthController
         Thank you for using our service!\n\n
 
         Best regards,
-        May Thingyan Support Team";
+        Yukai Support Team";
 
         if ($email === "") {
             Response::json([
