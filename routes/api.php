@@ -11,7 +11,8 @@ use App\Controllers\SearchController;
 use App\Controllers\ChatController;
 use App\Controllers\MessageController;
 use App\Controllers\ReportController;
-use App\Controllers\reportController;
+use App\Controllers\AdminController;
+
 use App\Core\Auth;
 
 
@@ -137,6 +138,14 @@ Router::add(
     "/api/deleted-account",
     fn() =>
     UserController::deletedAccount(),
+    true
+);
+
+Router::add(
+    "GET",
+    "/api/deactivate-account",
+    fn() =>
+    UserController::deactivateAccount(),
     true
 );
 
@@ -722,3 +731,30 @@ Router::add(
     ReportController::reported_acc(),
     false
  );
+/* ------get all reported posts----- */
+ Router::add(
+    "GET",
+    "/api/getReportedPosts",
+    fn()=>
+    ReportController::getReporPosts(),
+    true
+ );
+
+ /* ------get all reported accounts----- */
+ Router::add(
+    "GET",
+    "/api/getReportedAccounts",
+    fn()=>
+    ReportController::getReportedAccounts(),
+    true
+ );
+    /* ======= Admin Controller ================*/
+ /* ------control accounts----- */
+ Router::add(
+    "GET",
+    "/api/control-account",
+    fn()=>
+    AdminController::accountStatus(),
+    true
+ );
+ 

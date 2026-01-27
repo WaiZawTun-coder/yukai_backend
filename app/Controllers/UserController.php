@@ -484,4 +484,50 @@ class UserController
         }
     }
 
+
+    /* =============== Deactivate Account ======================== */
+    public static function deactivateAccount()
+    {
+        $conn = Database::connect();
+        $user_id = (int) (Request::input("user_id") ?? 0); // logged in user
+        $deactivate = (int) (Request::input("deactivate") ?? 0);
+        if ($user_id <= 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid user ID"
+            ], 400);
+            return;
+        }
+        // Check user exists
+        $stmt = $conn->prepare("SELECT password FROM users WHERE user_id = ?");
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        if ($result->num_rows === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "User not found"
+            ], 404);
+            return;
+        }
+
+        $user = $result->fetch_assoc();
+        //update deactivate
+        $update = $conn->prepare("UPDATE users SET deactivate = ?, is_active = 0  WHERE user_id = ?");
+        $update->bind_param("ii", $deactivate, $user_id);
+
+        if ($update->execute()) {
+            Response::json([
+                "status" => true,
+                "message" => "Deactivate Account"
+            ], 200);
+        } else {
+            Response::json([
+                "status" => false,
+                "message" => "Failed to deactivate your account"
+            ], 500);
+        }
+    }
+
 }
