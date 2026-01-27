@@ -78,11 +78,11 @@ class AuthController
         }
 
         $sql = "SELECT * FROM users 
-                WHERE email = ? OR username = ? OR display_name = ?
+                WHERE email = ? OR username = ? 
                 LIMIT 1";
 
         $stmt = $conn->prepare($sql);
-        $stmt->bind_param("sss", $username, $username, $username);
+        $stmt->bind_param("ss", $username, $username);
         $stmt->execute();
         $result = $stmt->get_result();
 
@@ -96,13 +96,30 @@ class AuthController
 
         $user = $result->fetch_assoc();
 
-        if ((int) $user['is_active'] === 0) {
+        if ((int) $user['is_active'] === 0 ) {
             Response::json([
                 "status" => false,
-                "message" => "Banned account"
+                "message" => "Account is not active" 
             ], 403);
             return;
         }
+        
+        if (trim($user['status']) === "suspend_user") {
+            Response::json([
+                "status" => false,
+                "message" => "The user account is suspended"
+            ], 403);
+            return;
+        }
+
+        if (trim($user['status']) === "ban_user") {
+            Response::json([
+                "status" => false,
+                "message" => "The user account is banned"
+            ], 403);
+            return;
+        }
+
 
         if (!PasswordService::verify($password, $user['password'])) {
             Response::json([
@@ -111,6 +128,16 @@ class AuthController
             ], 401);
             return;
         }
+        //deactivate to activate account
+        if((int)$user['deactivate'] === 1){
+            $update = $conn->prepare("UPDATE users SET deactivate = 0 WHERE username = ?");
+            $update->bind_param("s", $user['username']);
+            $update->execute();
+
+            
+            $user['deactivate'] = 0;
+        }
+
         if((int)$user['is_2fa'] === 1){
             $otpCode=self::generateOTP($user['user_id']);
             if(!$otpCode){

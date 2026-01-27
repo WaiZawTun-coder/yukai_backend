@@ -66,6 +66,7 @@ class SearchController
             FROM users u
             WHERE u.display_name LIKE ?
             AND is_active = 1
+            AND deactivate=0
             AND NOT EXISTS (
                 SELECT 1
                 FROM blocks b
@@ -279,6 +280,7 @@ class SearchController
             FROM users u
             WHERE u.display_name LIKE ?
             AND u.is_active = 1
+            AND u.deactivate=0
             AND NOT EXISTS (
                 SELECT 1
                 FROM blocks b
