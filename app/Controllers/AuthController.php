@@ -111,84 +111,86 @@ class AuthController
             ], 401);
             return;
         }
-        if((int)$user['is_2fa'] === 1){
-            $otpCode=self::generateOTP($user['user_id']);
-            if(!$otpCode){
-               Response::json([
-                  "status"=>false,
-                  "message"=>"Failed to generate OTP"
-        ]);
-        return;
-       }
-        
-       
-       //send otp via email
-       self::sendEmail($user['email'],$otpCode);
-       // 🔑 STEP 2: Generate PARTIAL access token
-    $accessToken = TokenService::generateAccessToken([
-        "user_id" => $user['user_id'],
-        "username" => $user['username'],
-        "two_factor_verified" => false
-    ]);
+        if ((int) $user['is_2fa'] === 1) {
+            $otpCode = self::generateOTP($user['user_id']);
+            if (!$otpCode) {
+                Response::json([
+                    "status" => false,
+                    "message" => "Failed to generate OTP"
+                ]);
+                return;
+            }
 
-    //  Do NOT issue refresh token yet
 
-    Response::json([
-        "status" => true,
-        "two_factor_required" => true,
-        "message" => "OTP sent to your email",
-        "data" => [
-            "user_id" => $user['user_id'],
-            "access_token" => $accessToken
-        ]
-    ]);
+            //send otp via email
+            self::sendEmail($user['email'], $otpCode);
+            // 🔑 STEP 2: Generate PARTIAL access token
+            $accessToken = TokenService::generateAccessToken([
+                "user_id" => $user['user_id'],
+                "username" => $user['username'],
+                "two_factor_verified" => false
+            ], 300);
+
+            //  Do NOT issue refresh token yet
+
+            Response::json([
+                "status" => true,
+                "two_factor_required" => true,
+                "message" => "OTP sent to your email",
+                "data" => [
+                    "user_id" => $user['user_id'],
+                    "access_token" => $accessToken
+                ]
+            ]);
+            return;
         }
-    return;
 
 
 
-        // // Generate tokens
-        // $accessToken = TokenService::generateAccessToken(["user_id" => $user['user_id'], "username" => $user["username"]]);
-        // [$refreshToken, $refreshHash] = TokenService::generateRefreshToken();
+        // Generate tokens
+        $accessToken = TokenService::generateAccessToken(["user_id" => $user['user_id'], "username" => $user["username"], "two_factor_verified" => true]);
+        $refreshPayload = TokenService::generateRefreshToken();
+        $refreshToken = $refreshPayload["token"];
+        $refreshHash = $refreshPayload["hash"];
 
-        // $expireAt = date("Y-m-d H:i:s", time() + 60 * 60 * 24 * 7);
+        $expireAt = date("Y-m-d H:i:s", time() + 60 * 60 * 24 * 7);
 
-        // $update = $conn->prepare("
-        //     UPDATE users 
-        //     SET refresh_token = ?, refresh_token_expire_time = ?
-        //     WHERE user_id = ?
-        // ");
-        // $update->bind_param("ssi", $refreshHash, $expireAt, $user['user_id']);
-        // $update->execute();
+        $update = $conn->prepare("
+            UPDATE users 
+            SET refresh_token = ?, refresh_token_expire_time = ?
+            WHERE user_id = ?
+        ");
+        $update->bind_param("ssi", $refreshHash, $expireAt, $user['user_id']);
+        $update->execute();
 
-        // $isSecure =
-        //     (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-        //     || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
+        $isSecure =
+            (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
 
 
-        // setcookie("refresh_token", $refreshToken, [
-        //     "expires" => time() + 60 * 60 * 24 * 7,
-        //     "path" => "/",
-        //     "secure" => $isSecure,
-        //     "httponly" => true,
-        //     "samesite" => $isSecure ? "None" : "Lax"
-        // ]);
+        setcookie("refresh_token", $refreshToken, [
+            "expires" => time() + 60 * 60 * 24 * 7,
+            "path" => "/",
+            "secure" => $isSecure,
+            "httponly" => true,
+            "samesite" => $isSecure ? "None" : "Lax"
+        ]);
 
         // BLOCK INCOMPLETE REGISTRATION
-        // if ((int) $user['completed_step'] < 2) {
-        //     Response::json([
-        //         "status" => true,
-        //         "incomplete" => true,
-        //         "message" => "Registration not completed",
-        //         "data" => [
-        //             "user_id" => $user["user_id"],
-        //             "username" => $user["username"],
-        //             "email" => $user["email"],
-        //             "completed_step" => $user["completed_step"],
-        //             // "access_token" => $accessToken
-        //         ]
-        //     ]);
-        // }
+        if ((int) $user['completed_step'] < 2) {
+            Response::json([
+                "status" => true,
+                "incomplete" => true,
+                "message" => "Registration not completed",
+                "data" => [
+                    "user_id" => $user["user_id"],
+                    "username" => $user["username"],
+                    "email" => $user["email"],
+                    "completed_step" => $user["completed_step"],
+                    "access_token" => $accessToken
+                ]
+            ]);
+        }
 
         Response::json([
             "status" => true,
@@ -258,15 +260,14 @@ class AuthController
 
                 $userId = $conn->insert_id;
 
-                $accessToken = TokenService::generateAccessToken(["user_id" => $userId, "username" => $generatedUsername], "registration");
-                [$refreshToken, $refreshHash] = TokenService::generateRefreshToken();
-
-                setcookie("refresh_token", $refreshToken, [
-                    "expires" => time() + 60 * 60 * 24 * 7,
-                    "path" => "/",
-                    "httponly" => true,
-                    "samesite" => "Strict"
-                ]);
+                $accessToken = TokenService::generateAccessToken(
+                    [
+                        "user_id" => $userId,
+                        "username" => $generatedUsername,
+                        "scope" => "registration"
+                    ],
+                    600
+                );
 
                 Response::json([
                     "status" => true,
@@ -290,15 +291,30 @@ class AuthController
 
                 //
                 $headers = getallheaders();
-                $header = $headers["Authorization"];
-                if (!preg_match('/Bearer\s(\S+)/', $header, $matches)) {
+                $authHeader = $headers["Authorization"] ?? $headers["authorization"] ?? null;
+                if (!preg_match('/Bearer\s(\S+)/', $authHeader, $matches)) {
                     Response::json([
                         "status" => false,
                         "message" => "Unauthorized"
                     ], 401);
                 }
                 $token = $matches[1];
-                $payload = JWT::decode($token, $_ENV["JWT_SECRET"]);
+                try {
+                    $payload = JWT::decode($token, $_ENV["JWT_SECRET"]);
+                } catch (\Exception $e) {
+                    Response::json([
+                        "status" => false,
+                        "message" => "Invalid or expired token"
+                    ], 401);
+                }
+
+                if (($payload["scope"] ?? null) !== "registration") {
+                    Response::json([
+                        "status" => false,
+                        "message" => "Invalid token scope"
+                    ], 403);
+                }
+
                 if ($payload["user_id"] != $userId) {
                     Response::json([
                         "status" => false,
@@ -489,7 +505,9 @@ class AuthController
         }
 
         // Rotate refresh token
-        [$newRefreshToken, $newRefreshHash] = TokenService::generateRefreshToken();
+        $refreshPayload = TokenService::generateRefreshToken();
+        $newRefreshToken = $refreshPayload["token"];
+        $newRefreshHash = $refreshPayload["hash"];
 
         $newExpire = date("Y-m-d H:i:s", time() + 604800);
 
@@ -757,22 +775,23 @@ class AuthController
     {
         echo json_encode(["message" => "profile"]);
     }
-    
-    public static function twoFactorAuthentication(){
-        $conn=Database::connect();
-        $input=Request::json();
-        $user_id=(int)($input['user_id']?? 0);
-        $otpcode=trim($input['otp_code']?? "");
-        if(!$user_id || $otpcode===""){
+
+    public static function twoFactorAuthentication()
+    {
+        $conn = Database::connect();
+        $input = Request::json();
+        $user_id = (int) ($input['user_id'] ?? 0);
+        $otpcode = trim($input['otp_code'] ?? "");
+        if (!$user_id || $otpcode === "") {
             Response::json([
-                "status"=>false,
-                "message"=>"user_id and otp code is required"
+                "status" => false,
+                "message" => "user_id and otp code is required"
             ]);
         }
-        if(!self::verifyOTP($user_id,$otpcode)){
+        if (!self::verifyOTP($user_id, $otpcode)) {
             Response::json([
-                "status"=>false,
-                "message"=>"Invalid input"
+                "status" => false,
+                "message" => "Invalid input"
             ]);
         }
         $stmt = $conn->prepare("SELECT * FROM users WHERE user_id = ?");
@@ -781,15 +800,49 @@ class AuthController
         $user = $stmt->get_result()->fetch_assoc();
 
         if (!$user) {
-           Response::json([
-              "status" => false,
-              "message" => "User not found"
-        ], 404);
-    }
+            Response::json([
+                "status" => false,
+                "message" => "User not found"
+            ], 404);
+        }
 
-    // OTP verified → issue tokens
-    // self::issueTokens($user);
+        $accessToken = TokenService::generateAccessToken(
+            [
+                "user_id" => $user["user_id"],
+                "username" => $user["username"],
+                "two_factor_verified" => true
+            ],
+            1800
+        );
 
-        
+        $refreshPayload = TokenService::generateRefreshToken();
+        $refreshToken = $refreshPayload["token"];
+        $refreshHash = $refreshPayload["hash"];
+
+        $expireAt = date("Y-m-d H:i:s", time() + 604800);
+
+        $update = $conn->prepare("
+            UPDATE users 
+            SET refresh_token = ?, refresh_token_expire_time = ?
+            WHERE user_id = ?
+        ");
+        $update->bind_param("ssi", $refreshHash, $expireAt, $user["user_id"]);
+        $update->execute();
+
+        setcookie("refresh_token", $refreshToken, [
+            "expires" => time() + 604800,
+            "path" => "/",
+            "secure" => true,
+            "httponly" => true,
+            "samesite" => "None"
+        ]);
+
+        Response::json([
+            "status" => true,
+            "message" => "2FA verified",
+            "data" => [
+                "access_token" => $accessToken
+            ]
+        ]);
     }
 }

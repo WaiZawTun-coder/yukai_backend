@@ -11,7 +11,6 @@ use App\Controllers\SearchController;
 use App\Controllers\ChatController;
 use App\Controllers\MessageController;
 use App\Controllers\ReportController;
-use App\Controllers\reportController;
 use App\Core\Auth;
 
 
@@ -619,24 +618,24 @@ Router::add("GET", "/api/update-saved-posts", function () {
 
 Router::add("GET", "/api/delete-saved-posts", function () {
     SaveController::deleteSavedPosts();
-}, true); 
+}, true);
 
 //friends
-Router::add("POST","/api/send-request", function(){
+Router::add("POST", "/api/send-request", function () {
     FriendController::sendFriendRequest();
 }, true);//send friend requent
-Router::add("POST","/api/response-request", function(){
+Router::add("POST", "/api/response-request", function () {
     FriendController::responseFriendRequest();
-},true);//accept,reject,cancel friend request
-Router::add("GET","/api/get-sent-requests",function(){
+}, true);//accept,reject,cancel friend request
+Router::add("GET", "/api/get-sent-requests", function () {
     FriendController::getFriendRequest();
-},true);//get Friend Request
-Router::add("GET","/api/get-received-requests",function(){
+}, true);//get Friend Request
+Router::add("GET", "/api/get-received-requests", function () {
     FriendController::getReceivedRequests();
-},true);
-Router::add("GET","/api/get-people-you-may-know", function(){
+}, true);
+Router::add("GET", "/api/get-people-you-may-know", function () {
     FriendController::peopleYouMayKnow();
-},true);
+}, true);
 // delete saved posts
 
 // Router::add("POST", "/auth/generateOTP", function () {
@@ -662,21 +661,21 @@ Router::add("POST", "/auth/reset-password", function () {
 
 
 //followers
-Router::add("POST","/api/follow", function(){
+Router::add("POST", "/api/follow", function () {
     FriendController::followUser();
-},false);
-Router::add("POST","/api/unfollow", function(){
+}, false);
+Router::add("POST", "/api/unfollow", function () {
     FriendController::unfollowUser();
-},false);
-Router::add("POST","/api/block-user", function(){
+}, false);
+Router::add("POST", "/api/block-user", function () {
     FriendController::blockUser();
-},false);
-Router::add("POST","/api/unblock",function(){
+}, false);
+Router::add("POST", "/api/unblock", function () {
     FriendController::unblockUser();
-},false);
-Router::add("POST","/api/unfriend",function(){
+}, false);
+Router::add("POST", "/api/unfriend", function () {
     FriendController::unfriend();
-},false);
+}, false);
 
 
 
@@ -686,10 +685,10 @@ Router::add("POST", "/api/search", function () {
 //chatting
 Router::add("POST", "/api/Chatting", function () {
     ChatController::privateChat();
-}, false); 
-Router::add("POST","/api/auth/2factors",function(){
+}, false);
+Router::add("POST", "/api/auth/2factors", function () {
     AuthController::twoFactorAuthentication();
-},false);
+}, false);
 
 Router::add(
     "POST",
@@ -711,14 +710,14 @@ Router::add(
 Router::add(
     "POST",
     "/api/reportPost",
-    fn()=>
+    fn() =>
     ReportController::reportPost(),
     false
- );
- Router::add(
+);
+Router::add(
     "POST",
     "/api/reportAcc",
-    fn()=>
+    fn() =>
     ReportController::reported_acc(),
     false
- );
+);

@@ -2,8 +2,9 @@
 
 $allowedOrigins = [
     "http://localhost:3000",
-    "https://yukai-frontend.vercel.app",
-    "https://yukai-social.vercel.app"
+    "http://localhost:8080",
+    "https://yukai-social.vercel.app",
+    "https://yukai-socket.onrender.com"
 ];
 
 if (isset($_SERVER['HTTP_ORIGIN']) && in_array($_SERVER['HTTP_ORIGIN'], $allowedOrigins)) {

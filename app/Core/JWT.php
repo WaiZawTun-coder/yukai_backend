@@ -3,49 +3,90 @@ namespace App\Core;
 
 use Exception;
 
-class JWT{
-    private static function base64UrlEncode($data){
-        return rtrim(strtr(base64_encode($data), "+/", "-_"), "=");
+class JWT
+{
+    /* ===============================
+       Base64 URL helpers
+    =============================== */
+
+    private static function base64UrlEncode(string $data): string
+    {
+        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
     }
 
-    private static function base64UrlDecode($data){
-        return base64_decode(strtr($data, "-_", "+/"));
+    private static function base64UrlDecode(string $data): string
+    {
+        return base64_decode(strtr($data, '-_', '+/'));
     }
 
-    public static function encode($payload, $secret, $expireSeconds = 86400){
-        $header = ["alg" => "HS256", "typ" => "JWT"];
+    /* ===============================
+       Encode JWT
+    =============================== */
 
-        $payload["iat"] = time();
-        $payload["exp"] = time() + $expireSeconds;
+    public static function encode(array $payload, string $secret, int $expiresIn): string
+    {
+        $header = [
+            'alg' => 'HS256',
+            'typ' => 'JWT'
+        ];
+
+        $now = time();
+
+        $payload = array_merge($payload, [
+            'iat' => $now,
+            'exp' => $now + $expiresIn
+        ]);
 
         $base64Header = self::base64UrlEncode(json_encode($header));
         $base64Payload = self::base64UrlEncode(json_encode($payload));
 
-        $signature = hash_hmac("sha256", $base64Header . "." . $base64Payload, $secret, true);
+        $signature = hash_hmac(
+            'sha256',
+            $base64Header . '.' . $base64Payload,
+            $secret,
+            true
+        );
 
-        return $base64Header . "." . $base64Payload . "." . self::base64UrlEncode($signature);
+        return $base64Header . '.' . $base64Payload . '.' . self::base64UrlEncode($signature);
     }
 
-    public static function decode($token, $secret){
-        $parts = explode(".", $token);
-        if(count($parts) !== 3){
-            throw new Exception("Invalid token format");
+    /* ===============================
+       Decode & Verify JWT
+    =============================== */
+
+    public static function decode(string $token, string $secret): array
+    {
+        $parts = explode('.', $token);
+        if (count($parts) !== 3) {
+            throw new Exception('Malformed token');
         }
 
-        [$header, $payload, $signature] = $parts;
+        [$headerB64, $payloadB64, $signatureB64] = $parts;
 
-        $validSignature = self::base64UrlEncode(hash_hmac("sha256", "$header.$payload", $secret, true));
+        $expectedSignature = self::base64UrlEncode(
+            hash_hmac(
+                'sha256',
+                $headerB64 . '.' . $payloadB64,
+                $secret,
+                true
+            )
+        );
 
-        if(!hash_equals($validSignature, $signature)){
-            throw new Exception("Invalid token signature");
+        if (!hash_equals($expectedSignature, $signatureB64)) {
+            throw new Exception('Invalid token signature');
         }
 
-        $payloadData = json_decode(self::base64UrlDecode($payload), true);
+        $payload = json_decode(self::base64UrlDecode($payloadB64), true);
 
-        if($payloadData["exp"] < time()){
-            throw new Exception("Token has expired");
+        if (!$payload) {
+            throw new Exception('Invalid payload');
         }
 
-        return $payloadData;
+        if (!isset($payload['exp']) || time() >= $payload['exp']) {
+            throw new Exception('Token expired');
+        }
+
+        return $payload;
     }
 }
+

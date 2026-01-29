@@ -14,13 +14,15 @@ class UserController
         $conn = Database::connect();
         $username = trim($_GET["username"] ?? "");
 
+        $user_id = (int) trim($_GET["user_id"] ?? "");
+
         $authUser = Auth::getUser();
         $userId = (int) $authUser["user_id"];
 
-        if ($username === "") {
+        if ($username === "" && $user_id === "") {
             Response::json([
                 "status" => false,
-                "message" => "Invalid Username"
+                "message" => "Invalid Username and User ID"
             ], 400);
             return;
         }
@@ -110,14 +112,14 @@ class UserController
             END AS request_direction
 
         FROM users u
-        WHERE u.username = ?
+        WHERE u.username = ? or u.user_id = ?
         LIMIT 1
     ";
 
         $stmt = $conn->prepare($userSql);
 
         $stmt->bind_param(
-            "iiiiiiiiiis",
+            "iiiiiiiiiisi",
 
             // friend_status (3)
             $userId,
@@ -136,7 +138,8 @@ class UserController
             $userId,
 
             // username
-            $username
+            $username,
+            $user_id
         );
 
         $stmt->execute();

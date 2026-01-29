@@ -209,18 +209,49 @@ class ChatController
         $chatStmt->execute();
         $chatRow = $chatStmt->get_result()->fetch_assoc();
 
-        // 🚀 Optional: auto-create chat
-        // if (!$chatRow) {
-        //     Response::json([
-        //         "status" => true,
-        //         "chat" => null,
-        //         "can_create" => true,
-        //         "target_user" => $target
-        //     ]);
-        //     return;
-        // }
+        /* -------------------- Auto-create chat -------------------- */
+        if (!$chatRow) {
 
-        $chat_id = (int) $chatRow["chat_id"];
+            $conn->begin_transaction();
+
+            try {
+                // Create chat
+                $createChatStmt = $conn->prepare("
+            INSERT INTO chats (type, created_by_user_id, created_at)
+            VALUES ('private', ?, NOW())
+        ");
+                $createChatStmt->bind_param("i", $me);
+                $createChatStmt->execute();
+                $chat_id = $conn->insert_id;
+
+                // Add participants
+                $participantStmt = $conn->prepare("
+            INSERT INTO chat_participants (chat_id, user_id, encrypted_key)
+            VALUES (?, ?, '')
+        ");
+
+                $participantStmt->bind_param("ii", $chat_id, $me);
+                $participantStmt->execute();
+
+                $participantStmt->bind_param("ii", $chat_id, $other_user_id);
+                $participantStmt->execute();
+
+                $conn->commit();
+
+            } catch (\Throwable $e) {
+                $conn->rollback();
+
+                Response::json([
+                    "status" => false,
+                    "message" => "Failed to create chat",
+                    "detail" => $e->getMessage()
+                ], 500);
+                return;
+            }
+
+        } else {
+            $chat_id = (int) $chatRow["chat_id"];
+        }
 
         // Load chat info
         $sql = "

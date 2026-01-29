@@ -2,29 +2,50 @@
 namespace App\Service;
 
 use App\Core\JWT;
-// require_once __DIR__  . '/../utilities/jwt.php';
-require_once __DIR__ . '/../../bootstrap.php';
 
 class TokenService
 {
-    public static function generateAccessToken($user, $scope = "auth", $expiry = 1800)
-    {
+    /* ===============================
+       Access Token (JWT)
+    =============================== */
+
+    public static function generateAccessToken(
+        array $payload,
+        int $ttl = 1800
+    ): string {
         return JWT::encode(
-            $user,
-            $_ENV["JWT_SECRET"],
-            $expiry
+            $payload,
+            $_ENV['JWT_SECRET'],
+            $ttl
         );
     }
 
-    public static function generateRefreshToken()
+    public static function verifyAccessToken(string $token): ?array
     {
-        $refreshToken = bin2hex(random_bytes(32));
-        $refreshHash = hash('sha256', $refreshToken);
-        return [$refreshToken, $refreshHash];
+        try {
+            return JWT::decode($token, $_ENV['JWT_SECRET']);
+        } catch (\Exception $e) {
+            return null;
+        }
     }
 
-    public static function verifyRefreshToken(string $token, string $hash): bool
+    /* ===============================
+       Refresh Token
+    =============================== */
+
+    public static function generateRefreshToken(): array
     {
-        return hash_equals($hash, hash("sha256", $token));
+        $token = bin2hex(random_bytes(32));
+        $hash = hash('sha256', $token);
+
+        return [
+            'token' => $token,
+            'hash' => $hash
+        ];
+    }
+
+    public static function verifyRefreshToken(string $token, string $storedHash): bool
+    {
+        return hash_equals($storedHash, hash('sha256', $token));
     }
 }
