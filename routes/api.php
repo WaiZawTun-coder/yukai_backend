@@ -514,6 +514,14 @@ Router::add(
 );
 
 Router::add(
+    "GET",
+    "/api/get-group-chat",
+    fn() =>
+    ChatController::getChatById(),
+    true
+);
+
+Router::add(
     "POST",
     "/api/chats/private",
     fn() =>
@@ -534,6 +542,13 @@ Router::add(
     "/api/chats/participants",
     fn() =>
     ChatController::getParticipants(),
+    true
+);
+
+Router::add(
+    "POST",
+    "/api/chats/add-participants",
+    fn() => ChatController::addParticipants(),
     true
 );
 

@@ -32,6 +32,7 @@ class ChatController
                    c.chat_id,
                    c.type,
                    c.created_at,
+                c.chat_name,
        
                    -- Last message info
                    m.message_id AS last_message_id,
@@ -259,6 +260,7 @@ class ChatController
                   c.chat_id,
                   c.type,
                   c.created_at,
+                  c.chat_name,
        
                   u.user_id AS other_user_id,
                   u.username AS other_username,
@@ -347,6 +349,126 @@ class ChatController
         ]);
     }
 
+    public static function getChatById()
+    {
+        $conn = Database::connect();
+        $user = Auth::getUser();
+        $me = (int) $user["user_id"];
+
+        $chatId = (int) trim($_GET["chat_id"] ?? "");
+        if (!$chatId) {
+            Response::json(["status" => false, "message" => "Invalid Chat Id"], 400);
+            return;
+        }
+
+        $device_id = trim($_GET["device_id"] ?? "");
+        if (!$device_id) {
+            Response::json(["status" => false, "message" => "device_id required"], 400);
+            return;
+        }
+
+        // Removed echo to avoid corrupting JSON response
+
+        $sql = "SELECT 
+              c.chat_id,
+              c.type,
+              c.created_at,
+              c.chat_name,
+   
+              u.user_id AS other_user_id,
+              u.username AS other_username,
+              u.display_name AS other_display_name,
+              u.profile_image AS other_profile_image,
+              u.gender AS other_gender,
+   
+              (SELECT COUNT(*) 
+               FROM chat_participants p 
+               WHERE p.chat_id = c.chat_id
+              ) AS member_count,
+   
+              m.message_id AS last_message_id,
+              mp.cipher_text AS last_message,
+              m.message_type AS last_message_type,
+              m.sent_at AS last_message_time,
+              m.sender_user_id AS last_message_sender_id,
+              mp.status AS last_message_status,
+   
+              last_sender.display_name AS last_sender_name,
+   
+              (
+                  SELECT COUNT(*)
+                  FROM messages um
+                  JOIN message_payloads ump ON ump.message_id = um.message_id
+                  WHERE um.chat_id = c.chat_id
+                    AND um.sender_user_id != ?
+                    AND ump.recipient_user_id = ?
+                    AND ump.status != 'seen'
+                    AND um.is_deleted = 0
+              ) AS unread_count
+   
+          FROM chats c
+   
+          JOIN chat_participants cp 
+            ON cp.chat_id = c.chat_id 
+           AND cp.user_id = ?
+   
+          LEFT JOIN chat_participants cp2
+            ON cp2.chat_id = c.chat_id
+           AND cp2.user_id != cp.user_id
+   
+          LEFT JOIN users u 
+            ON u.user_id = cp2.user_id
+   
+          LEFT JOIN messages m 
+            ON m.message_id = (
+                SELECT m2.message_id 
+                FROM messages m2
+                WHERE m2.chat_id = c.chat_id
+                  AND m2.is_deleted = 0
+                ORDER BY m2.sent_at DESC
+                LIMIT 1
+            )
+   
+          LEFT JOIN message_payloads mp
+            ON mp.message_id = m.message_id
+           AND mp.recipient_user_id = ?
+           AND mp.recipient_device_id = ?
+   
+          LEFT JOIN users last_sender 
+            ON last_sender.user_id = m.sender_user_id
+   
+          WHERE c.chat_id = ?
+          LIMIT 1";
+
+        $stmt = $conn->prepare($sql);
+        if (!$stmt) {
+            Response::json(["status" => false, "message" => "SQL prepare failed: " . $conn->error], 500);
+            return;
+        }
+
+        $stmt->bind_param("iiiisi", $me, $me, $me, $me, $device_id, $chatId);
+        if (!$stmt->execute()) {
+            Response::json(["status" => false, "message" => "SQL execute failed: " . $stmt->error], 500);
+            return;
+        }
+
+        $result = $stmt->get_result();
+        if (!$result) {
+            Response::json(["status" => false, "message" => "SQL get_result failed: " . $stmt->error], 500);
+            return;
+        }
+
+        $chat = $result->fetch_assoc();
+        $stmt->close();
+
+        if (!$chat) {
+            Response::json(["status" => false, "message" => "Chat not found or no access"], 404);
+            return;
+        }
+
+        Response::json(["status" => true, "data" => $chat, "can_create" => false]);
+    }
+
 
 
     /* ============================
@@ -419,6 +541,8 @@ class ChatController
         $user = Auth::getUser();
         $me = (int) $user["user_id"];
 
+        $chat_name = Request::input("chat_name");
+
         $members = Request::input("members");
         if (!is_array($members) || count($members) == 0) {
             Response::json(["status" => false, "message" => "Members required"], 400);
@@ -427,8 +551,8 @@ class ChatController
 
         $conn->begin_transaction();
         try {
-            $stmt = $conn->prepare("INSERT INTO chats (type, created_by_user_id) VALUES ('group', ?)");
-            $stmt->bind_param("i", $me);
+            $stmt = $conn->prepare("INSERT INTO chats (type,chat_name, created_by_user_id) VALUES ('group',?, ?)");
+            $stmt->bind_param("si", $chat_name, $me);
             $stmt->execute();
             $chat_id = $stmt->insert_id;
 
@@ -450,6 +574,36 @@ class ChatController
             $conn->rollback();
             Response::json(["status" => false, "message" => "Failed to create group", "error" => $e->getMessage()], 500);
         }
+    }
+
+    public static function addParticipants()
+    {
+        $conn = Database::connect();
+        $user = Auth::getUser();
+        $me = (int) $user["user_id"];
+
+        $input = Request::json();
+
+        $chat_id = (int) $input["chat_id"];
+        $members = $input["members"];
+        if (!is_array($members) || count($members) == 0) {
+            Response::json(["status" => false, "message" => "Members required"]);
+            return;
+        }
+
+        $sql = "INSERT INTO chat_participants (chat_id, user_id, encrypted_key) VALUES (?, ?, '')";
+        $stmt = $conn->prepare($sql);
+
+        foreach ($members as $uid) {
+            $uid = (int) $uid;
+            if ($uid == $me)
+                continue;
+            $stmt->bind_param("ii", $chat_id, $uid);
+            $stmt->execute();
+        }
+
+        Response::json(["status" => true, "message" => "Successfully add new members"]);
+
     }
 
     /* ============================
@@ -485,6 +639,7 @@ class ChatController
                u.username,
                u.display_name,
                u.profile_image,
+               u.gender,
                cp.joined_at,
                d.device_id,
                d.identity_key_pub,
@@ -515,6 +670,7 @@ class ChatController
                     "display_name" => $row["display_name"],
                     "profile_image" => $row["profile_image"],
                     "joined_at" => $row["joined_at"],
+                    "gender" => $row["gender"],
                     "devices" => []
                 ];
             }
