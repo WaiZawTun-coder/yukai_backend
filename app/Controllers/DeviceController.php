@@ -202,7 +202,7 @@ class DeviceController
         if ($count == 0) {
             Response::json([
                 "status" => false,
-                "message" => "Incorrect Device ID"
+                "has_keys" => false
             ]);
             return;
         }
