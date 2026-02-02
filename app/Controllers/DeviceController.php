@@ -176,4 +176,40 @@ class DeviceController
             "data" => $keys
         ]);
     }
+
+    public static function getDeviceStatus()
+    {
+        $conn = Database::connect();
+        $user = Auth::getUser();
+        $me = (int) $user["user_id"];
+
+        $device_id = trim($_GET["device_id"] ?? "");
+        if ($device_id === "") {
+            Response::json([
+                "status" => false,
+                "message" => "Device ID is required."
+            ]);
+            return;
+        }
+
+        $sql = "SELECT device_id, identity_key_pub FROM devices WHERE device_id=? AND user_id=? AND is_active = TRUE LIMIT 1";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("si", $device_id, $me);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        $count = $result->num_rows;
+        if ($count == 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Incorrect Device ID"
+            ]);
+            return;
+        }
+
+        Response::json([
+            "status" => true,
+            "has_keys" => true
+        ]);
+    }
 }

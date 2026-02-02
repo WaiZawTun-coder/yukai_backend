@@ -713,6 +713,9 @@ Router::add(
     true
 );
 
+Router::add("GET", "/api/device-status", function () {
+    DeviceController::getDeviceStatus();
+}, true);
 
 Router::add(
     "GET",
