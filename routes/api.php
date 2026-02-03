@@ -3,6 +3,7 @@
 use App\Controllers\AuthController;
 use App\Controllers\DeviceController;
 use App\Controllers\FriendController;
+use App\Controllers\NotificationController;
 use App\Controllers\PostController;
 use App\Controllers\PostHidingController;
 use App\Controllers\UserController;
@@ -730,12 +731,41 @@ Router::add(
     "/api/reportPost",
     fn() =>
     ReportController::reportPost(),
-    false
+    true
 );
+
 Router::add(
     "POST",
     "/api/reportAcc",
     fn() =>
     ReportController::reported_acc(),
-    false
+    true
+);
+
+Router::add(
+    "GET",
+    "/api/get-notifications",
+    fn() => NotificationController::getNotifications(),
+    true
+);
+
+Router::add(
+    "POST",
+    "/api/add-notification",
+    fn() => NotificationController::addNotification(),
+    true
+);
+
+Router::add(
+    "POST",
+    "/api/mark-notification-read",
+    fn() => NotificationController::updateStatus(),
+    true
+);
+
+Router::add(
+    "POST",
+    "/api/mark-notifications-read",
+    fn() => NotificationController::markAllAsRead(),
+    true
 );
