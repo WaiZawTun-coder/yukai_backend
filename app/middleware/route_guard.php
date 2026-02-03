@@ -1,4 +1,6 @@
 <?php
+
+use App\Core\AdminAuth;
 use App\Core\JWT;
 use App\Core\Auth;
 
@@ -24,7 +26,10 @@ function route_guard()
     try {
         $secret = $_ENV["JWT_SECRET"];
         $decoded = JWT::decode($token, $secret);
-        Auth::setUser($decoded);
+        if(isset($decoded["role"]) && ($decoded["role"] == "admin" || $decoded["role"] == "super_admin")){
+            AdminAuth::setAdmin($decoded);
+        }else{
+        Auth::setUser($decoded);}
         return $decoded;
     } catch (Exception $e) {
         http_response_code(401);

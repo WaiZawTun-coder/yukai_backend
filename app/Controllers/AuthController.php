@@ -68,6 +68,7 @@ class AuthController
 
         $username = trim($input['username'] ?? '');
         $password = trim($input['password'] ?? '');
+        $device_id=(int)(Request::input("device_id")?? 0);
 
         if ($username === '' || $password === '') {
             Response::json([
@@ -78,11 +79,11 @@ class AuthController
         }
 
         $sql = "SELECT * FROM users 
-                WHERE email = ? OR username = ? OR display_name = ?
+                WHERE email = ? OR username = ? 
                 LIMIT 1";
 
         $stmt = $conn->prepare($sql);
-        $stmt->bind_param("sss", $username, $username, $username);
+        $stmt->bind_param("ss", $username, $username);
         $stmt->execute();
         $result = $stmt->get_result();
 
@@ -96,13 +97,30 @@ class AuthController
 
         $user = $result->fetch_assoc();
 
-        if ((int) $user['is_active'] === 0) {
+        if ((int) $user['is_active'] === 0 ) {
             Response::json([
                 "status" => false,
-                "message" => "Banned account"
+                "message" => "Account is not active" 
             ], 403);
             return;
         }
+        
+        if (trim($user['status']) === "suspend_user") {
+            Response::json([
+                "status" => false,
+                "message" => "The user account is suspended"
+            ], 403);
+            return;
+        }
+
+        if (trim($user['status']) === "ban_user") {
+            Response::json([
+                "status" => false,
+                "message" => "The user account is banned"
+            ], 403);
+            return;
+        }
+
 
         if (!PasswordService::verify($password, $user['password'])) {
             Response::json([
@@ -111,6 +129,37 @@ class AuthController
             ], 401);
             return;
         }
+
+        //deactivate to activate account
+        if((int)$user['deactivate'] === 1){
+            $update = $conn->prepare("UPDATE users SET deactivate = 0 WHERE username = ?");
+            $update->bind_param("s", $user['username']);
+            $update->execute();
+
+            
+            $user['deactivate'] = 0;
+        }
+
+        if((int)$user['is_2fa'] === 1){
+            $otpCode=self::generateOTP($user['user_id']);
+            if(!$otpCode){
+               Response::json([
+                  "status"=>false,
+                  "message"=>"Failed to generate OTP"
+        ]);
+        return;
+       }
+        
+       
+       //send otp via email
+       self::sendEmail($user['email'],$otpCode);
+       // 🔑 STEP 2: Generate PARTIAL access token
+    $accessToken = TokenService::generateAccessToken([
+        "user_id" => $user['user_id'],
+        "username" => $user['username'],
+        "two_factor_verified" => false
+    ]);
+
         if ((int) $user['is_2fa'] === 1) {
             $otpCode = self::generateOTP($user['user_id']);
             if (!$otpCode) {
@@ -120,6 +169,7 @@ class AuthController
                 ]);
                 return;
             }
+
 
 
             //send otp via email
@@ -192,6 +242,26 @@ class AuthController
             ]);
         }
 
+                // check device id exists
+                $stmt=$conn->prepare("Select * from devices where id=?");
+                $stmt->bind_param("i",$device_id);
+                $stmt->execute();
+                $result=$stmt->get_result();
+                if($result->num_rows === 0){
+                    Response::json([
+                        "status"=>false,
+                        "message"=>"Device not found"
+                    ]);
+                    return;
+                }
+          // INSERT LOGIN HISTORY ✅
+            // ======================
+            $stmt = $conn->prepare("
+                INSERT INTO login_histories (user_id, device_id, logged_in_time)
+                VALUES (?, ?, NOW())
+            ");
+            $stmt->bind_param("ii", $user['user_id'], $device_id);
+            $stmt->execute();
         Response::json([
             "status" => true,
             "message" => "Login successful",
@@ -212,6 +282,9 @@ class AuthController
                 "completed_step" => $user["completed_step"]
             ]
         ]);
+
+
+    }
     }
 
     // need to add protect in step 2

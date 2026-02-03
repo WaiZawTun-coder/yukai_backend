@@ -12,6 +12,11 @@ use App\Controllers\SearchController;
 use App\Controllers\ChatController;
 use App\Controllers\MessageController;
 use App\Controllers\ReportController;
+
+use App\Controllers\AdminController;
+use App\Controllers\LoginHistoriesController;
+
+
 use App\Core\Auth;
 
 
@@ -137,6 +142,14 @@ Router::add(
     "/api/deleted-account",
     fn() =>
     UserController::deletedAccount(),
+    true
+);
+
+Router::add(
+    "GET",
+    "/api/deactivate-account",
+    fn() =>
+    UserController::deactivateAccount(),
     true
 );
 
@@ -414,6 +427,14 @@ Router::add(
 );
 
 Router::add(
+    "GET",
+    "/api/getBlock-lists",
+    fn() =>
+    FriendController::getBlockLists(),
+    true
+);
+
+Router::add(
     "POST",
     "/api/unfriend",
     fn() =>
@@ -667,9 +688,9 @@ Router::add("GET", "/api/get-people-you-may-know", function () {
 // }, false); // send email
 
 //passwords
-Router::add("POST", "/auth/forget-password", function () {
-    AuthController::forgetPassword();
-}, true); // forget password
+// Router::add("POST", "/auth/forget-password", function () {
+//     AuthController::forgetPassword();
+// }, true); // forget password
 
 Router::add("POST", "/auth/reset-password", function () {
     AuthController::resetPassword();
@@ -700,9 +721,15 @@ Router::add("POST", "/api/search", function () {
 }, true); // search 
 //chatting
 Router::add("POST", "/api/Chatting", function () {
-    ChatController::privateChat();
+
+    ChatController::createPrivateChat();
+}, false); 
+Router::add("POST","/api/auth/2factors",function(){
+
+    ChatController::createPrivateChat();
 }, false);
 Router::add("POST", "/api/auth/2factors", function () {
+
     AuthController::twoFactorAuthentication();
 }, false);
 
@@ -735,11 +762,107 @@ Router::add(
 );
 
 Router::add(
+
     "POST",
     "/api/reportAcc",
     fn() =>
     ReportController::reported_acc(),
     true
+ );
+/* ------get all reported posts----- */
+ Router::add(
+    "GET",
+    "/api/getReportedPosts",
+    fn()=>
+    ReportController::getReporPosts(),
+    true
+ );
+
+ /* ------get all reported accounts----- */
+ Router::add(
+    "GET",
+    "/api/getReportedAccounts",
+    fn()=>
+    ReportController::getReportedAccounts(),
+    true
+ );
+    /* ======= Admin Controller ================*/
+ /* ------control accounts----- */
+ Router::add(
+    "GET",
+    "/api/control-account",
+    fn()=>
+    AdminController::accountStatus(),
+    true
+ );
+
+ /* ------Get All Admin accounts----- */
+ Router::add(
+    "GET",
+    "/api/get-admin-lists",
+    fn()=>
+    AdminController::getAdminLists(),
+    true
+ );
+
+ /* ------Super Admin ban admin(moderator)---- */
+ Router::add(
+    "GET",
+    "/api/ban-admin",
+    fn()=>
+    AdminController::banAdmin(),
+    true
+ );
+ Router::add(
+    "POST",
+    "/api/adminRegister",
+    fn()=>
+    AdminController::AdminRegister(),
+    true
+ );
+ Router::add(
+    "POST",
+    "/api/adminLogin",
+    fn()=>
+    AdminController::AdminLogin(),
+    false
+
+ );
+ Router::add(
+    "POST",
+    "/api/forgetPassword",
+    fn() =>
+    AdminController::forgetPassword(),
+    false
+ );
+ Router::add(
+    "POST",
+    "/api/reset_password",
+    fn()=>
+    AdminController::resetPassword(),
+    false
+ );
+
+ /*
+|--------------------------------------------------------------------------
+| Login Histories
+|--------------------------------------------------------------------------
+*/
+
+// Router::add(
+//     "GET",
+//     "/api/login-histories",
+//     fn() =>
+//     LoginHistoriesController::loginHistories(),
+//     true
+// );
+
+Router::add(
+    "GET",
+    "/api/get-login-histories",
+    fn() =>
+    LoginHistoriesController::getLoginHistories(),
+    false
 );
 
 Router::add(
