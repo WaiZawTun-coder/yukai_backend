@@ -11,12 +11,11 @@ use App\Controllers\SearchController;
 use App\Controllers\ChatController;
 use App\Controllers\MessageController;
 use App\Controllers\ReportController;
-<<<<<<< HEAD
+
 use App\Controllers\AdminController;
 use App\Controllers\LoginHistoriesController;
 
-=======
->>>>>>> a5507eab38b2cb95d031a52d33cf850cd2911066
+
 use App\Core\Auth;
 
 
@@ -721,15 +720,15 @@ Router::add("POST", "/api/search", function () {
 }, true); // search 
 //chatting
 Router::add("POST", "/api/Chatting", function () {
-<<<<<<< HEAD
+
     ChatController::createPrivateChat();
 }, false); 
 Router::add("POST","/api/auth/2factors",function(){
-=======
-    ChatController::privateChat();
+
+    ChatController::createPrivateChat();
 }, false);
 Router::add("POST", "/api/auth/2factors", function () {
->>>>>>> a5507eab38b2cb95d031a52d33cf850cd2911066
+
     AuthController::twoFactorAuthentication();
 }, false);
 
@@ -758,15 +757,12 @@ Router::add(
     "/api/reportPost",
     fn() =>
     ReportController::reportPost(),
-<<<<<<< HEAD
+
     true
  );
- Router::add(
-=======
-    false
-);
+ 
 Router::add(
->>>>>>> a5507eab38b2cb95d031a52d33cf850cd2911066
+
     "POST",
     "/api/reportAcc",
     fn() =>
@@ -830,7 +826,7 @@ Router::add(
     fn()=>
     AdminController::AdminLogin(),
     false
-<<<<<<< HEAD
+
  );
  Router::add(
     "POST",
@@ -873,6 +869,5 @@ Router::add(
 
 
  
-=======
-);
->>>>>>> a5507eab38b2cb95d031a52d33cf850cd2911066
+
+

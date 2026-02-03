@@ -129,7 +129,7 @@ class AuthController
             ], 401);
             return;
         }
-<<<<<<< HEAD
+
         //deactivate to activate account
         if((int)$user['deactivate'] === 1){
             $update = $conn->prepare("UPDATE users SET deactivate = 0 WHERE username = ?");
@@ -159,7 +159,7 @@ class AuthController
         "username" => $user['username'],
         "two_factor_verified" => false
     ]);
-=======
+
         if ((int) $user['is_2fa'] === 1) {
             $otpCode = self::generateOTP($user['user_id']);
             if (!$otpCode) {
@@ -169,7 +169,7 @@ class AuthController
                 ]);
                 return;
             }
->>>>>>> a5507eab38b2cb95d031a52d33cf850cd2911066
+
 
 
             //send otp via email
@@ -284,6 +284,7 @@ class AuthController
         ]);
 
 
+    }
     }
 
     // need to add protect in step 2
