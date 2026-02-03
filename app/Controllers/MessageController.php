@@ -69,6 +69,7 @@ class MessageController
                     u.username,
                     u.display_name,
                     u.profile_image,
+                    u.gender,
 
                     -- Payload for THIS device only (decrypt)
                     mpd.cipher_text,

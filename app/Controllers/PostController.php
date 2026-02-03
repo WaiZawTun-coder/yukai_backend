@@ -38,204 +38,148 @@ class PostController
         }
     }
 
+    private static function attachTaggedUsers($conn, &$posts)
+    {
+        if (empty($posts))
+            return;
+
+        $postIds = array_keys($posts);
+        $placeholders = implode(',', array_fill(0, count($postIds), '?'));
+        $types = str_repeat('i', count($postIds));
+
+        $sql = "
+        SELECT 
+            pt.post_id,
+            u.user_id,
+            u.username,
+            u.display_name,
+            u.profile_image
+        FROM post_tags pt
+        JOIN users u ON u.user_id = pt.tagged_user_id
+        WHERE pt.post_id IN ($placeholders)
+    ";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param($types, ...$postIds);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        while ($row = $result->fetch_assoc()) {
+            $posts[$row["post_id"]]["tagged_users"][] = [
+                "user_id" => $row["user_id"],
+                "username" => $row["username"],
+                "display_name" => $row["display_name"],
+                "profile_image" => $row["profile_image"]
+            ];
+        }
+    }
+
+
     /* =====================================================
      * Get all posts
      * ===================================================== */
 
 
-    public static function getPosts()  
-{
-    $conn = Database::connect();
-    $user_id = (int)(Request::input("user_id") ?? 0);
-    
-    // If no user_id provided in request, get from Auth
-    if ($user_id === 0) {
-        $user = Auth::getUser();
-        $user_id = $user?->user_id ?? 0;
+    public static function getPosts()
+    {
+        $conn = Database::connect();
 
-    
+        /* -------------------- Resolve User -------------------- */
 
+        $authUser = Auth::getUser();
+        $user_id = (int) (Request::input("user_id") ?? ($authUser["user_id"] ?? 0));
 
-        // If no user_id provided in request, get from Auth
         if ($user_id === 0) {
-            $user = Auth::getUser();
-            $user_id = $user?->user_id ?? 0;
-
-
-
-
-            $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
-            $limit = 5;
-            $offset = ($page - 1) * $limit;
-            $user_id = Auth::getUser()["user_id"];
-
-            $sql = "SELECT 
-                p.post_id,
-                p.creator_user_id,
-                p.shared_post_id,
-                p.privacy,
-                p.content,
-                p.is_archived,
-                p.is_draft,
-                p.is_deleted,
-                p.is_shared,
-                p.created_at,
-                p.updated_at,
-
-                u.display_name,
-                u.username,
-                u.gender,
-                u.profile_image,
-
-                COUNT(DISTINCT r.post_react_id) AS react_count,
-                COUNT(DISTINCT c.post_comment_id) AS comment_count,
-                (COUNT(DISTINCT r.post_react_id) + COUNT(DISTINCT c.post_comment_id)) AS total_engagement,
-
-                CASE 
-                    WHEN COUNT(ur.post_react_id) > 0 THEN 1
-                    ELSE 0
-                END AS is_liked,
-
-                MAX(ur.reaction) AS reaction
-
-                FROM posts p
-                JOIN users u ON u.user_id = p.creator_user_id
-                LEFT JOIN post_reacts r ON r.post_id = p.post_id
-                LEFT JOIN post_comments c ON c.post_id = p.post_id
-
-                LEFT JOIN post_reacts ur 
-                    ON ur.post_id = p.post_id
-                AND ur.user_id = ?
-
-                WHERE p.is_deleted = 0
-                AND p.is_archived = 0
-
-                GROUP BY p.post_id
-                ORDER BY total_engagement DESC, p.created_at DESC
-                LIMIT ? OFFSET ?
-
-        ";
-
-
-            $stmt = $conn->prepare($sql);
-            $stmt->bind_param("iii", $user_id, $limit, $offset);
-            $stmt->execute();
-            $result = $stmt->get_result();
-
-            $posts = [];
-            while ($row = $result->fetch_assoc()) {
-                $row["creator"] = [
-                    "id" => $row["creator_user_id"],
-                    "display_name" => $row["display_name"],
-                    "gender" => $row["gender"],
-                    "profile_image" => $row["profile_image"],
-                    "username" => $row["username"]
-                ];
-
-                unset(
-                    $row["display_name"],
-                    $row["gender"],
-                    $row["profile_image"],
-                    $row["username"]
-                );
-
-                $row['attachments'] = [];
-                $posts[$row['post_id']] = $row;
-            }
-
-            self::attachAttachments($conn, $posts);
-
-            $totalPosts = self::getPostCount();
-            $totalPages = ceil($totalPosts / $limit);
-
             Response::json([
-                "status" => true,
-                "page" => $page,
-                "totalPages" => $totalPages,
-                "data" => array_values($posts)
-            ]);
-
+                "status" => false,
+                "message" => "Unauthorized"
+            ], 401);
         }
 
-        // Pagination
-        $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
+        /* -------------------- Pagination -------------------- */
+
+        $page = max(1, (int) ($_GET["page"] ?? 1));
         $limit = 5;
         $offset = ($page - 1) * $limit;
 
+        /* -------------------- SQL -------------------- */
 
-        $totalPosts = self::getPostCount();
-        $totalPages = ceil($totalPosts / $limit);
-
-        Response::json([
-            "status" => true,
-            "page" => $page,
-            "totalPages" => $totalPages,
-            "data" => array_values($posts)
-        ]);
-
-    }
-
-    // Pagination
-    $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
-    $limit = 5;
-    $offset = ($page - 1) * $limit;
-
-    // SQL query - FIXED syntax error
-    $sql = "
-
-        
+        $sql = "
         SELECT 
-        p.post_id,
-        p.creator_user_id,
-        p.shared_post_id,
-        p.privacy,
-        p.content,
-        p.is_archived,
-        p.is_draft,
-        p.is_deleted,
-        p.is_shared,
-        p.created_at,
-        p.updated_at,
-
-        u.display_name,
-        u.username,
-        u.gender,
-        u.profile_image,
-
-        COUNT(DISTINCT r.post_react_id) AS react_count,
-        COUNT(DISTINCT c.post_comment_id) AS comment_count,
-        (COUNT(DISTINCT r.post_react_id) + COUNT(DISTINCT c.post_comment_id)) AS total_engagement,
-
-        CASE 
-            WHEN COUNT(ur.post_react_id) > 0 THEN 1
-            ELSE 0
-        END AS is_liked,
-
-        MAX(ur.reaction) AS reaction
-
-    FROM posts p
-    JOIN users u ON u.user_id = p.creator_user_id
-    LEFT JOIN post_reacts r ON r.post_id = p.post_id
-    LEFT JOIN post_comments c ON c.post_id = p.post_id
-
-    -- Current user's reaction
-    LEFT JOIN post_reacts ur 
-        ON ur.post_id = p.post_id
-       AND ur.user_id = ?
-
-    -- Filter out hidden posts
-    LEFT JOIN hide_posts hp
-        ON hp.post_id = p.post_id
-       AND hp.user_id = ?
-
-    WHERE p.is_deleted = 0
-      AND p.is_archived = 0
-      AND hp.post_id IS NULL
-
-    GROUP BY p.post_id
-    ORDER BY total_engagement DESC, p.created_at DESC
-    LIMIT ? OFFSET ?
+            p.post_id,
+            p.creator_user_id,
+            p.shared_post_id,
+            p.privacy,
+            p.content,
+            p.is_archived,
+            p.is_draft,
+            p.is_deleted,
+            p.is_shared,
+            p.created_at,
+            p.updated_at,
+    
+            u.display_name,
+            u.username,
+            u.gender,
+            u.profile_image,
+    
+            COUNT(DISTINCT r.post_react_id) AS react_count,
+            COUNT(DISTINCT c.post_comment_id) AS comment_count,
+            (COUNT(DISTINCT r.post_react_id) + COUNT(DISTINCT c.post_comment_id)) AS total_engagement,
+    
+            CASE 
+                WHEN COUNT(ur.post_react_id) > 0 THEN 1
+                ELSE 0
+            END AS is_liked,
+    
+            MAX(ur.reaction) AS reaction
+    
+        FROM posts p
+        JOIN users u 
+            ON u.user_id = p.creator_user_id
+    
+        LEFT JOIN post_reacts r 
+            ON r.post_id = p.post_id
+    
+        LEFT JOIN post_comments c 
+            ON c.post_id = p.post_id
+    
+        -- Current user's reaction
+        LEFT JOIN post_reacts ur 
+            ON ur.post_id = p.post_id
+           AND ur.user_id = ?
+    
+        -- Hidden posts
+        LEFT JOIN hide_posts hp
+            ON hp.post_id = p.post_id
+           AND hp.user_id = ?
+    
+        WHERE p.is_deleted = 0
+          AND p.is_archived = 0
+          AND hp.post_id IS NULL
+    
+          -- 🔐 PRIVACY FILTER
+          AND (
+                p.privacy = 'public'
+    
+             OR (p.privacy = 'friends' AND EXISTS (
+                    SELECT 1 
+                    FROM friends f
+                    WHERE f.status = 'accepted'
+                      AND (
+                            (f.user_1_id = p.creator_user_id AND f.user_2_id = ?)
+                         OR (f.user_2_id = p.creator_user_id AND f.user_1_id = ?)
+                      )
+             ))
+    
+             OR (p.privacy = 'private' AND p.creator_user_id = ?)
+          )
+    
+        GROUP BY p.post_id
+        ORDER BY total_engagement DESC, p.created_at DESC
+        LIMIT ? OFFSET ?
     ";
+
 
         $stmt = $conn->prepare($sql);
         if (!$stmt) {
@@ -245,18 +189,21 @@ class PostController
             ], 500);
         }
 
-        $stmt->bind_param("iiii", $user_id, $user_id, $limit, $offset);
+        $stmt->bind_param("iiiiiii", $user_id, $user_id, $user_id, $user_id, $user_id, $limit, $offset);
         $stmt->execute();
         $result = $stmt->get_result();
 
+        /* -------------------- Hydrate Posts -------------------- */
+
         $posts = [];
+
         while ($row = $result->fetch_assoc()) {
-            $creator = [
-                "id" => $row["creator_user_id"] ?? null,
-                "display_name" => $row["display_name"] ?? null,
-                "gender" => $row["gender"] ?? null,
-                "profile_image" => $row["profile_image"] ?? null,
-                "username" => $row["username"] ?? null
+            $row["creator"] = [
+                "id" => $row["creator_user_id"],
+                "display_name" => $row["display_name"],
+                "gender" => $row["gender"],
+                "profile_image" => $row["profile_image"],
+                "username" => $row["username"]
             ];
 
             unset(
@@ -266,18 +213,18 @@ class PostController
                 $row["username"]
             );
 
-            $row["creator"] = $creator;
             $row["attachments"] = [];
-
+            $row["tagged_users"] = [];
             $posts[$row["post_id"]] = $row;
         }
 
-        // Attach post attachments
         self::attachAttachments($conn, $posts);
+        self::attachTaggedUsers($conn, $posts);
 
-        // Total posts (exclude hidden posts)
+        /* -------------------- Pagination Meta -------------------- */
+
         $totalPosts = self::getPostCount();
-        $totalPages = ceil($totalPosts / $limit);
+        $totalPages = max(1, ceil($totalPosts / $limit));
 
         Response::json([
             "status" => true,
@@ -286,6 +233,7 @@ class PostController
             "data" => array_values($posts)
         ]);
     }
+
 
     /* =====================================================
      * Get posts by user ID
@@ -394,10 +342,12 @@ LIMIT ? OFFSET ?;
             );
 
             $row["attachments"] = [];
+            $row["tagged_users"] = [];
             $posts[$row["post_id"]] = $row;
         }
 
         self::attachAttachments($conn, $posts);
+        self::attachTaggedUsers($conn, $posts);
 
         $totalPosts = self::getPostCountByUsername($username);
         $totalPages = ceil($totalPosts / $limit);
@@ -529,12 +479,14 @@ LIMIT ? OFFSET ?;
 
             $row["creator"] = $creator;
             $row["attachments"] = [];
+            $row["tagged_users"] = [];
 
             $posts[$row["post_id"]] = $row;
         }
 
         // Attach post attachments
         self::attachAttachments($conn, $posts);
+        self::attachTaggedUsers($conn, $posts);
 
         // Total posts (exclude hidden posts)
         $totalPosts = self::getFollowingPostCount($user_id);
@@ -663,6 +615,7 @@ LIMIT ? OFFSET ?;
         ];
 
         self::attachAttachments($conn, $posts);
+        self::attachTaggedUsers($conn, $posts);
 
         Response::json([
             "status" => true,
@@ -685,6 +638,8 @@ LIMIT ? OFFSET ?;
         $shared_post_id = Request::input("shared_post_id") ?? null;
         $is_draft = (int) (Request::input("is_draft") ?? 0);
         $is_archived = (int) (Request::input("is_archived") ?? 0);
+
+        $tag_friends = Request::input("tag_friends") ?? [];
 
         if ($creator_id === 0) {
             Response::json([
@@ -758,6 +713,33 @@ LIMIT ? OFFSET ?;
                         $fileType
                     );
                     $stmtAttach->execute();
+                }
+            }
+
+            if (is_array($tag_friends) && empty($tag_friends)) {
+                $tag_sql = "INSERT INTO post_tags (post_id, tagged_user_id) VALUES (?, ?)";
+                $check_sql = "SELECT post_tag_id FROM post_tags WHERE post_id = ? AND tagged_user_id = ?";
+
+                $tag_stmt = $conn->prepare($tag_sql);
+                $check_stmt = $conn->prepare($check_sql);
+                // $alreadyTagged = [];
+
+                foreach ($tag_friends as $user_id) {
+                    $user_id = (int) $user_id;
+                    if ($user_id <= 0)
+                        continue;
+
+                    $check_stmt->bind_param("ii", $post_id, $user_id);
+                    $check_stmt->execute();
+                    $check_result = $check_stmt->get_result();
+
+                    if ($check_result->num_rows > 0) {
+                        // $alreadyTagged[] = $user_id;
+                        continue;
+                    }
+
+                    $tag_stmt->bind_param("ii", $post_id, $user_id);
+                    $tag_stmt->execute();
                 }
             }
 
@@ -881,18 +863,18 @@ LIMIT ? OFFSET ?;
 
 
 
-        $privacy =trim( Request::input("privacy") ?? 'public');
-        $is_deleted=(int)(Request::input("is_deleted") ?? 0);
-        $who_can_comment=trim(Request::input("who_can_comment")?? "");
-        $who_can_react=trim(Request::input("who_can_react")?? "");
-        $who_can_share=trim(Request::input("who_can_share")?? "");
-
-        
+        $privacy = trim(Request::input("privacy") ?? 'public');
+        $is_deleted = (int) (Request::input("is_deleted") ?? 0);
+        $who_can_comment = trim(Request::input("who_can_comment") ?? "");
+        $who_can_react = trim(Request::input("who_can_react") ?? "");
+        $who_can_share = trim(Request::input("who_can_share") ?? "");
 
 
 
 
-        if ($post_id=== 0) {
+
+
+        if ($post_id === 0) {
             Response::json([
                 "status" => false,
                 "message" => "Invalid post"
@@ -1120,10 +1102,10 @@ GROUP BY p.post_id
         $conn = Database::connect();
         $creator_id = (int) (Request::input("creator_id") ?? 0);
         $post_id = (int) (Request::input("post_id") ?? 0);
-        $privacy =trim( Request::input("privacy") ?? 'public');
-        
+        $privacy = trim(Request::input("privacy") ?? 'public');
 
-        if ($post_id=== 0) {
+
+        if ($post_id === 0) {
             Response::json([
                 "status" => false,
                 "message" => "Invalid post"
@@ -1154,7 +1136,7 @@ GROUP BY p.post_id
 
             $stmt->execute();
 
-            
+
 
             // =============================
             // Handle post_attachments (optional)
@@ -1858,10 +1840,12 @@ GROUP BY p.post_id
             );
 
             $row['attachments'] = [];
+            $row["tagged_users"] = [];
             $posts[$row['post_id']][] = $row;
         }
 
         PostController::attachAttachments($conn, $posts);
+        self::attachTaggedUsers($conn, $posts);
 
         $totalPosts = PostController::getFriendsPostCount($user_id);
         $totalPages = ceil($totalPosts / $limit);
@@ -1876,11 +1860,12 @@ GROUP BY p.post_id
     }
 
     /* =====================================================
-    * Tag Post
-    * ===================================================== */
-    public static function tagPost() {
+     * Tag Post
+     * ===================================================== */
+    public static function tagPost()
+    {
         $conn = Database::connect();
-        $post_id = (int)(Request::input("post_id") ?? 0);
+        $post_id = (int) (Request::input("post_id") ?? 0);
         $tagged_user_ids = Request::input("tagged_user_id") ?? [];
 
         //check the post or user
@@ -1906,7 +1891,7 @@ GROUP BY p.post_id
             return;
         }
 
-        $alreadyTagged = []; 
+        $alreadyTagged = [];
 
         // Start transaction
         $conn->begin_transaction();
@@ -1921,8 +1906,9 @@ GROUP BY p.post_id
             );
 
             foreach ($tagged_user_ids as $user_id) {
-                $user_id = (int)$user_id;
-                if ($user_id <= 0) continue;
+                $user_id = (int) $user_id;
+                if ($user_id <= 0)
+                    continue;
 
                 // Check if already tagged
                 $checkStmt->bind_param("ii", $post_id, $user_id);
@@ -1963,12 +1949,13 @@ GROUP BY p.post_id
     }
 
     /* =====================================================
-    * Update Tag Post
-    * ===================================================== */
-    public static function updateTagPost() {
+     * Update Tag Post
+     * ===================================================== */
+    public static function updateTagPost()
+    {
         $conn = Database::connect();
 
-        $post_id = (int)(Request::input("post_id") ?? 0);
+        $post_id = (int) (Request::input("post_id") ?? 0);
         $tagged_user_ids = Request::input("tagged_user_id") ?? [];
 
         // Validate input
@@ -2013,7 +2000,7 @@ GROUP BY p.post_id
             );
 
             foreach ($tagged_user_ids as $user_id) {
-                $user_id = (int)$user_id;
+                $user_id = (int) $user_id;
                 if ($user_id <= 0) {
                     continue;
                 }
@@ -2040,16 +2027,17 @@ GROUP BY p.post_id
 
 
     /* =====================================================
-    * Delete Tag Post
-    * ===================================================== */
-    public static function deleteTagPost() {
+     * Delete Tag Post
+     * ===================================================== */
+    public static function deleteTagPost()
+    {
         $conn = Database::connect();
 
-        $post_id = (int)(Request::input("post_id") ?? 0);
-        $tagged_user_id = (int)(Request::input("tagged_user_id") ?? 0);
+        $post_id = (int) (Request::input("post_id") ?? 0);
+        $tagged_user_id = (int) (Request::input("tagged_user_id") ?? 0);
 
         // Validate input
-        if ($post_id <= 0 || $tagged_user_id<=0) {
+        if ($post_id <= 0 || $tagged_user_id <= 0) {
             Response::json([
                 "status" => false,
                 "message" => "Invalid  post or user"
@@ -2061,7 +2049,7 @@ GROUP BY p.post_id
         $checkStmt = $conn->prepare(
             "SELECT post_tag_id FROM post_tags WHERE post_id = ? and tagged_user_id=?"
         );
-        $checkStmt->bind_param("ii", $post_id,$tagged_user_id);
+        $checkStmt->bind_param("ii", $post_id, $tagged_user_id);
         $checkStmt->execute();
         $result = $checkStmt->get_result();
 
@@ -2077,7 +2065,7 @@ GROUP BY p.post_id
         $deleteStmt = $conn->prepare(
             "DELETE FROM post_tags WHERE post_id = ? and tagged_user_id=?"
         );
-        $deleteStmt->bind_param("ii", $post_id,$tagged_user_id);
+        $deleteStmt->bind_param("ii", $post_id, $tagged_user_id);
         $deleteStmt->execute();
 
         Response::json([
@@ -2087,14 +2075,15 @@ GROUP BY p.post_id
     }
 
     /* =====================================================
-    * Get Tag Post
-    * ===================================================== */
-    public static function getTagPost() {
+     * Get Tag Post
+     * ===================================================== */
+    public static function getTagPost()
+    {
         $conn = Database::connect();
 
-        $post_id = (int)(Request::input("post_id") ?? 0);
+        $post_id = (int) (Request::input("post_id") ?? 0);
 
-        $page  = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+        $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
         $limit = 5;
         $offset = ($page - 1) * $limit;
 
@@ -2127,9 +2116,9 @@ GROUP BY p.post_id
         );
         $countStmt->bind_param("i", $post_id);
         $countStmt->execute();
-        $total = (int)$countStmt->get_result()->fetch_assoc()['total'];
+        $total = (int) $countStmt->get_result()->fetch_assoc()['total'];
 
-        
+
         $tagStmt = $conn->prepare(
             "SELECT 
                 u.user_id,
@@ -2158,7 +2147,7 @@ GROUP BY p.post_id
                 "page" => $page,
                 "limit" => $limit,
                 "total" => $total,
-                "total_pages" => ceil($total / $limit)  
+                "total_pages" => ceil($total / $limit)
             ],
             "users" => $users
         ]);
