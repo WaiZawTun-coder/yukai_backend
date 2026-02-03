@@ -2,8 +2,9 @@
 
 $allowedOrigins = [
     "http://localhost:3000",
-    "https://yukai-frontend.vercel.app",
-    "https://yukai-social.vercel.app"
+    "http://localhost:8080",
+    "https://yukai-social.vercel.app",
+    "https://yukai-socket.onrender.com"
 ];
 
 if (isset($_SERVER['HTTP_ORIGIN']) && in_array($_SERVER['HTTP_ORIGIN'], $allowedOrigins)) {
@@ -42,6 +43,7 @@ require_once __DIR__ . "/../app/Controllers/SaveController.php";
 require_once __DIR__ . "/../app/Controllers/ChatController.php";
 require_once __DIR__ . "/../app/Controllers/MessageController.php";
 require_once __DIR__ . "/../app/Controllers/ReportController.php";
+require_once __DIR__ . "/../app/Controllers/DeviceController.php";
 
 Router::dispatch();
 

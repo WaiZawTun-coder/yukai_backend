@@ -234,7 +234,7 @@ class SaveController
 
         $username = $_GET["username"];
 
-        if (!$username) {
+        if (isset($username)) {
             $user = Auth::getUser();
             $user_id = $user["user_id"];
         } else {
