@@ -12,6 +12,7 @@ use App\Controllers\ChatController;
 use App\Controllers\MessageController;
 use App\Controllers\ReportController;
 use App\Controllers\AdminController;
+use App\Controllers\LoginHistoriesController;
 
 use App\Core\Auth;
 
@@ -423,6 +424,14 @@ Router::add(
 );
 
 Router::add(
+    "GET",
+    "/api/getBlock-lists",
+    fn() =>
+    FriendController::getBlockLists(),
+    true
+);
+
+Router::add(
     "POST",
     "/api/unfriend",
     fn() =>
@@ -661,9 +670,9 @@ Router::add("GET","/api/get-people-you-may-know", function(){
 // }, false); // send email
 
 //passwords
-Router::add("POST", "/auth/forget-password", function () {
-    AuthController::forgetPassword();
-}, true); // forget password
+// Router::add("POST", "/auth/forget-password", function () {
+//     AuthController::forgetPassword();
+// }, true); // forget password
 
 Router::add("POST", "/auth/reset-password", function () {
     AuthController::resetPassword();
@@ -722,14 +731,14 @@ Router::add(
     "/api/reportPost",
     fn()=>
     ReportController::reportPost(),
-    false
+    true
  );
  Router::add(
     "POST",
     "/api/reportAcc",
     fn()=>
     ReportController::reported_acc(),
-    false
+    true
  );
 /* ------get all reported posts----- */
  Router::add(
@@ -757,4 +766,76 @@ Router::add(
     AdminController::accountStatus(),
     true
  );
+
+ /* ------Get All Admin accounts----- */
+ Router::add(
+    "GET",
+    "/api/get-admin-lists",
+    fn()=>
+    AdminController::getAdminLists(),
+    true
+ );
+
+ /* ------Super Admin ban admin(moderator)---- */
+ Router::add(
+    "GET",
+    "/api/ban-admin",
+    fn()=>
+    AdminController::banAdmin(),
+    true
+ );
+ Router::add(
+    "POST",
+    "/api/adminRegister",
+    fn()=>
+    AdminController::AdminRegister(),
+    true
+ );
+ Router::add(
+    "POST",
+    "/api/adminLogin",
+    fn()=>
+    AdminController::AdminLogin(),
+    false
+ );
+ Router::add(
+    "POST",
+    "/api/forgetPassword",
+    fn() =>
+    AdminController::forgetPassword(),
+    false
+ );
+ Router::add(
+    "POST",
+    "/api/reset_password",
+    fn()=>
+    AdminController::resetPassword(),
+    false
+ );
+
+ /*
+|--------------------------------------------------------------------------
+| Login Histories
+|--------------------------------------------------------------------------
+*/
+
+// Router::add(
+//     "GET",
+//     "/api/login-histories",
+//     fn() =>
+//     LoginHistoriesController::loginHistories(),
+//     true
+// );
+
+Router::add(
+    "GET",
+    "/api/get-login-histories",
+    fn() =>
+    LoginHistoriesController::getLoginHistories(),
+    false
+);
+
+ 
+
+
  

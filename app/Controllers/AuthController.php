@@ -68,6 +68,7 @@ class AuthController
 
         $username = trim($input['username'] ?? '');
         $password = trim($input['password'] ?? '');
+        $device_id=(int)(Request::input("device_id")?? 0);
 
         if ($username === '' || $password === '') {
             Response::json([
@@ -217,6 +218,26 @@ class AuthController
         //     ]);
         // }
 
+                // check device id exists
+                $stmt=$conn->prepare("Select * from devices where id=?");
+                $stmt->bind_param("i",$device_id);
+                $stmt->execute();
+                $result=$stmt->get_result();
+                if($result->num_rows === 0){
+                    Response::json([
+                        "status"=>false,
+                        "message"=>"Device not found"
+                    ]);
+                    return;
+                }
+          // INSERT LOGIN HISTORY ✅
+            // ======================
+            $stmt = $conn->prepare("
+                INSERT INTO login_histories (user_id, device_id, logged_in_time)
+                VALUES (?, ?, NOW())
+            ");
+            $stmt->bind_param("ii", $user['user_id'], $device_id);
+            $stmt->execute();
         Response::json([
             "status" => true,
             "message" => "Login successful",
@@ -237,6 +258,8 @@ class AuthController
                 "completed_step" => $user["completed_step"]
             ]
         ]);
+
+
     }
 
     // need to add protect in step 2
