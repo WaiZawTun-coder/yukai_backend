@@ -201,7 +201,7 @@ class DeviceController
         $count = $result->num_rows;
         if ($count == 0) {
             Response::json([
-                "status" => false,
+                "status" => true,
                 "has_keys" => false
             ]);
             return;

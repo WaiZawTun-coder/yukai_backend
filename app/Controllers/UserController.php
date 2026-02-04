@@ -19,7 +19,7 @@ class UserController
         $authUser = Auth::getUser();
         $userId = (int) $authUser["user_id"];
 
-        if ($username === "" && $user_id === "") {
+        if ($username === "" && !$user_id) {
             Response::json([
                 "status" => false,
                 "message" => "Invalid Username and User ID"
