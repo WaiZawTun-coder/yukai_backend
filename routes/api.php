@@ -354,6 +354,8 @@ Router::add(
 
 Router::add("GET", "/api/get-following", fn() => FriendController::getFollowings(), true);
 
+Router::add("GET", "/api/get-followers", fn() => FriendController::getFollowers(), true);
+
 Router::add(
     "POST",
     "/api/send-request",
@@ -723,8 +725,8 @@ Router::add("POST", "/api/search", function () {
 Router::add("POST", "/api/Chatting", function () {
 
     ChatController::createPrivateChat();
-}, false); 
-Router::add("POST","/api/auth/2factors",function(){
+}, false);
+Router::add("POST", "/api/auth/2factors", function () {
 
     ChatController::createPrivateChat();
 }, false);
@@ -762,88 +764,87 @@ Router::add(
 );
 
 Router::add(
-
     "POST",
     "/api/reportAcc",
     fn() =>
     ReportController::reported_acc(),
     true
- );
+);
 /* ------get all reported posts----- */
- Router::add(
+Router::add(
     "GET",
     "/api/getReportedPosts",
-    fn()=>
+    fn() =>
     ReportController::getReporPosts(),
     true
- );
+);
 
- /* ------get all reported accounts----- */
- Router::add(
+/* ------get all reported accounts----- */
+Router::add(
     "GET",
     "/api/getReportedAccounts",
-    fn()=>
+    fn() =>
     ReportController::getReportedAccounts(),
     true
- );
-    /* ======= Admin Controller ================*/
- /* ------control accounts----- */
- Router::add(
+);
+/* ======= Admin Controller ================*/
+/* ------control accounts----- */
+Router::add(
     "GET",
     "/api/control-account",
-    fn()=>
+    fn() =>
     AdminController::accountStatus(),
     true
- );
+);
 
- /* ------Get All Admin accounts----- */
- Router::add(
+/* ------Get All Admin accounts----- */
+Router::add(
     "GET",
     "/api/get-admin-lists",
-    fn()=>
+    fn() =>
     AdminController::getAdminLists(),
     true
- );
+);
 
- /* ------Super Admin ban admin(moderator)---- */
- Router::add(
+/* ------Super Admin ban admin(moderator)---- */
+Router::add(
     "GET",
     "/api/ban-admin",
-    fn()=>
+    fn() =>
     AdminController::banAdmin(),
     true
- );
- Router::add(
+);
+Router::add(
     "POST",
     "/api/adminRegister",
-    fn()=>
+    fn() =>
     AdminController::AdminRegister(),
     true
- );
- Router::add(
+);
+Router::add(
     "POST",
     "/api/adminLogin",
-    fn()=>
+    fn() =>
     AdminController::AdminLogin(),
     false
 
- );
- Router::add(
+);
+Router::add(
     "POST",
     "/api/forgetPassword",
     fn() =>
     AdminController::forgetPassword(),
     false
- );
- Router::add(
+);
+Router::add(
     "POST",
     "/api/reset_password",
-    fn()=>
+    fn() =>
     AdminController::resetPassword(),
     false
- );
+);
 
- /*
+/*
 |--------------------------------------------------------------------------
 | Login Histories
 |--------------------------------------------------------------------------
