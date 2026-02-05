@@ -142,6 +142,28 @@ class FriendController
         ]);
     }
 
+    public static function getFollowers()
+    {
+        $conn = Database::connect();
+        $user = Auth::getUser();
+        $me = (int) $user["user_id"];
+
+        $sql = "SELECT u.user_id, u.username, u.display_name, u.gender, u.profile_image from follows JOIN users u ON u.user_id = f.following_user_id WHERE f.following_user_id = ? AND f.status = 1 ORDER BY u.display_name ASC";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $me);
+
+        $stmt->execute();
+
+        $result = $stmt->get_result();
+        $followers = [];
+
+        while ($row = $result->fetch_assoc()) {
+            $followers[] = $row;
+        }
+
+        Response::json(["status" => true, "data" => $followers]);
+    }
 
 
     public static function sendFriendRequest()
@@ -728,7 +750,7 @@ class FriendController
     {
         $conn = Database::connect();
         // Current page
-        $page  = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+        $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
         $limit = 5;
         $offset = ($page - 1) * $limit;
 
@@ -737,7 +759,7 @@ class FriendController
         $countStmt->execute();
         $countResult = $countStmt->get_result()->fetch_assoc();
 
-        $totalRecords = (int)$countResult['total'];
+        $totalRecords = (int) $countResult['total'];
         $totalPages = ceil($totalRecords / $limit);
 
         if ($totalRecords === 0) {
@@ -775,8 +797,8 @@ class FriendController
             "total_records" => $totalRecords,
             "data" => $blockAccounts
         ]);
-        
-        
+
+
 
     }
     public static function unfriend()

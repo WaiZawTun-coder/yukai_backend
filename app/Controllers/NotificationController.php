@@ -17,10 +17,10 @@ class NotificationController
         $type = trim(Request::input("type"));
         $referenceId = (int) Request::input("referenceId");
         $message = trim(Request::input("message"));
-        $target_user_id = (int) Request::input("target_user_id");
+        $target = Request::input("target_user_id");
 
         // Basic validation
-        if (!$type || !$referenceId || !$message || !$target_user_id) {
+        if (!$type || !$referenceId || !$message || !$target) {
             Response::json([
                 "status" => false,
                 "message" => "Missing required fields"
@@ -29,13 +29,13 @@ class NotificationController
         }
 
         // Prevent self-notification
-        if ($me === $target_user_id) {
-            Response::json([
-                "status" => false,
-                "message" => "Cannot notify yourself"
-            ], 400);
-            return;
-        }
+        // if ($me === $target_user_id) {
+        //     Response::json([
+        //         "status" => false,
+        //         "message" => "Cannot notify yourself"
+        //     ]);
+        //     return;
+        // }
 
         try {
             $conn->begin_transaction();
@@ -47,27 +47,33 @@ class NotificationController
             VALUES (?, ?, ?, ?)
         ";
 
-            $eventStmt = $conn->prepare($eventSQL);
-            $eventStmt->bind_param("isis", $me, $type, $referenceId, $message);
+            foreach ($target as $target_user_id) {
+                if ($target == $me)
+                    continue;
 
-            if (!$eventStmt->execute()) {
-                throw new \Exception("Failed to insert notification event");
-            }
+                $eventStmt = $conn->prepare($eventSQL);
+                $eventStmt->bind_param("isis", $me, $type, $referenceId, $message);
 
-            $event_id = $eventStmt->insert_id;
+                if (!$eventStmt->execute()) {
+                    throw new \Exception("Failed to insert notification event");
+                }
 
-            // Insert notification for target user
-            $notifSQL = "
+                $event_id = $eventStmt->insert_id;
+
+                // Insert notification for target user
+                $notifSQL = "
             INSERT INTO notifications 
             (user_id, notification_event_id) 
             VALUES (?, ?)
         ";
 
-            $notifStmt = $conn->prepare($notifSQL);
-            $notifStmt->bind_param("ii", $target_user_id, $event_id);
+                $notifStmt = $conn->prepare($notifSQL);
+                $notifStmt->bind_param("ii", $target_user_id, $event_id);
+                $notifStmt->execute();
 
-            if (!$notifStmt->execute()) {
-                throw new \Exception("Failed to insert notification");
+                // if (!$notifStmt->execute()) {
+                //     throw new \Exception("Failed to insert notification");
+                // }
             }
 
             $conn->commit();
