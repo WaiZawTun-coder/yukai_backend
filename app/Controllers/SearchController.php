@@ -65,7 +65,12 @@ class SearchController
             SELECT u.user_id, u.username, u.display_name, u.profile_image, u.gender
             FROM users u
             WHERE u.display_name LIKE ?
+<<<<<<< HEAD
+            AND is_active = 1
+            AND deactivate=0
+=======
             AND is_active = 1 AND u.user_id != ?
+>>>>>>> a5507eab38b2cb95d031a52d33cf850cd2911066
             AND NOT EXISTS (
                 SELECT 1
                 FROM blocks b
@@ -279,6 +284,7 @@ class SearchController
             FROM users u
             WHERE u.display_name LIKE ?
             AND u.is_active = 1
+            AND u.deactivate=0
             AND NOT EXISTS (
                 SELECT 1
                 FROM blocks b

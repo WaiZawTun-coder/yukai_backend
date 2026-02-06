@@ -5,7 +5,7 @@ use App\Core\Database;
 use App\Core\Response;
 use App\Core\Request;
 use App\Core\Auth;
-
+use Exception;
 class FriendController
 {
     public static function getFriends()
@@ -142,6 +142,28 @@ class FriendController
         ]);
     }
 
+    public static function getFollowers()
+    {
+        $conn = Database::connect();
+        $user = Auth::getUser();
+        $me = (int) $user["user_id"];
+
+        $sql = "SELECT u.user_id, u.username, u.display_name, u.gender, u.profile_image from follows JOIN users u ON u.user_id = f.following_user_id WHERE f.following_user_id = ? AND f.status = 1 ORDER BY u.display_name ASC";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $me);
+
+        $stmt->execute();
+
+        $result = $stmt->get_result();
+        $followers = [];
+
+        while ($row = $result->fetch_assoc()) {
+            $followers[] = $row;
+        }
+
+        Response::json(["status" => true, "data" => $followers]);
+    }
 
 
     public static function sendFriendRequest()
@@ -720,6 +742,63 @@ class FriendController
                 "message" => "you did not block this user so u cannot make unblocking process"
             ]);
         }
+
+    }
+    //get block frineds
+
+    public static function getBlockLists()
+    {
+        $conn = Database::connect();
+        // Current page
+        $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
+        $limit = 5;
+        $offset = ($page - 1) * $limit;
+
+        /* ---------- COUNT TOTAL ROWS ---------- */
+        $countStmt = $conn->prepare("SELECT COUNT(*) as total FROM blocks ");
+        $countStmt->execute();
+        $countResult = $countStmt->get_result()->fetch_assoc();
+
+        $totalRecords = (int) $countResult['total'];
+        $totalPages = ceil($totalRecords / $limit);
+
+        if ($totalRecords === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Block is not found"
+            ]);
+            return;
+        }
+
+        /* ---------- FETCH DATA ---------- */
+        $stmt = $conn->prepare(
+            "SELECT *
+
+            FROM blocks bl
+            ORDER BY bl.created_at DESC
+            LIMIT ? OFFSET ?"
+        );
+
+        $stmt->bind_param("ii", $limit, $offset);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        $blockAccounts = [];
+        while ($row = $result->fetch_assoc()) {
+            $blockAccounts[] = $row;
+        }
+
+        /* ---------- RESPONSE ---------- */
+        Response::json([
+            "status" => true,
+            "current_page" => $page,
+            "limit" => $limit,
+            "total_pages" => $totalPages,
+            "total_records" => $totalRecords,
+            "data" => $blockAccounts
+        ]);
+
+
 
     }
     public static function unfriend()

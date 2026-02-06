@@ -129,5 +129,114 @@ class ReportController{
         ]);
 
     }
+    /* ---------- Get All Reported Posts (status is pending) ---------- */
+    public static function getReporPosts() {
+    $conn = Database::connect();
+
+    // Current page
+    $page  = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+    $limit = 5;
+    $offset = ($page - 1) * $limit;
+
+    /* ---------- COUNT TOTAL ROWS ---------- */
+    $countStmt = $conn->prepare("SELECT COUNT(*) as total FROM reported_posts rp where rp.status='pending' ");
+    $countStmt->execute();
+    $countResult = $countStmt->get_result()->fetch_assoc();
+
+    $totalRecords = (int)$countResult['total'];
+    $totalPages = ceil($totalRecords / $limit);
+
+    if ($totalRecords === 0) {
+        Response::json([
+            "status" => false,
+            "message" => "Reported post is not found"
+        ]);
+        return;
+    }
+
+    /* ---------- FETCH DATA ---------- */
+    $stmt = $conn->prepare(
+        "SELECT *
+         FROM reported_posts rp
+         WHERE rp.status='pending'
+
+         ORDER BY rp.reported_at DESC
+         LIMIT ? OFFSET ?"
+    );
+
+    $stmt->bind_param("ii", $limit, $offset);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    $reportedPosts = [];
+    while ($row = $result->fetch_assoc()) {
+        $reportedPosts[] = $row;
+    }
+
+    /* ---------- RESPONSE ---------- */
+    Response::json([
+        "status" => true,
+        "current_page" => $page,
+        "limit" => $limit,
+        "total_pages" => $totalPages,
+        "total_records" => $totalRecords,
+        "data" => $reportedPosts
+    ]);
+}
+
+/* ---------- Get All Reported Accounts (status is pending) ---------- */
+    public static function getReportedAccounts() {
+    $conn = Database::connect();
+
+    // Current page
+    $page  = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+    $limit = 5;
+    $offset = ($page - 1) * $limit;
+
+    /* ---------- COUNT TOTAL ROWS ---------- */
+    $countStmt = $conn->prepare("SELECT COUNT(*) as total FROM reported_accounts ra where rp.status='pending'");
+    $countStmt->execute();
+    $countResult = $countStmt->get_result()->fetch_assoc();
+
+    $totalRecords = (int)$countResult['total'];
+    $totalPages = ceil($totalRecords / $limit);
+
+    if ($totalRecords === 0) {
+        Response::json([
+            "status" => false,
+            "message" => "Reported Account is not found"
+        ]);
+        return;
+    }
+
+    /* ---------- FETCH DATA ---------- */
+    $stmt = $conn->prepare(
+        "SELECT *
+         FROM reported_accounts ra
+         WHERE ra.status='pending'
+
+         ORDER BY ra.created_at DESC
+         LIMIT ? OFFSET ?"
+    );
+
+    $stmt->bind_param("ii", $limit, $offset);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    $reportedAccounts = [];
+    while ($row = $result->fetch_assoc()) {
+        $reportedAccounts[] = $row;
+    }
+
+    /* ---------- RESPONSE ---------- */
+    Response::json([
+        "status" => true,
+        "current_page" => $page,
+        "limit" => $limit,
+        "total_pages" => $totalPages,
+        "total_records" => $totalRecords,
+        "data" => $reportedAccounts
+    ]);
+}
     
 }
