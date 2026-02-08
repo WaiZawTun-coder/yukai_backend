@@ -53,10 +53,26 @@ class DeviceController
         $signedPreKeyPub = base64_decode($input["signed_prekey_pub"], true);
         $signedPreKeySig = base64_decode($input["signed_prekey_sig"], true);
 
-        if ($identityKeyPub === false || $signedPreKeyPub === false || $signedPreKeySig === false) {
+        if ($identityKeyPub === false) {
             Response::json([
                 "status" => false,
-                "message" => "Invalid base64 key data"
+                "message" => "Invalid base64 key data identityKeyPub"
+            ], 400);
+            return;
+        }
+
+        if ($signedPreKeyPub === false) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid base64 key data signedPreKeyPub"
+            ], 400);
+            return;
+        }
+
+        if ($signedPreKeySig === false) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid base64 key data signedPreKeySig"
             ], 400);
             return;
         }
