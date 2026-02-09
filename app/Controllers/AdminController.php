@@ -23,7 +23,7 @@ class AdminController
 {
 
     /* ====== Account Status ====== */
-    public static function accountStatus()
+    public static function updateAccountStatus()
     {
         $admin_id = (int) (Request::input("admin_id") ?? 0);
         $conn = Database::connect();
@@ -67,12 +67,12 @@ class AdminController
         if ($update->execute()) {
             Response::json([
                 "status" => true,
-                "message" => "Status changed successfully"
+                "message" => "Status changed successful"
             ], 200);
         } else {
             Response::json([
                 "status" => false,
-                "message" => "Failed to update password"
+                "message" => "Failed to update status"
             ], 500);
         }
 

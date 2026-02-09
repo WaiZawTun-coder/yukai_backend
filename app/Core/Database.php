@@ -46,14 +46,9 @@ class Database
             "port" => (int) (getenv("DB_PORT") ?: 3307),
             "user" => getenv("DB_USER") ?: "root",
 
+
             "password" => getenv("DB_PASSWORD") ?: "",
-
-
             "database" => getenv("DB_NAME") ?: "yukai"
-
-
-
-
         ];
     }
 }

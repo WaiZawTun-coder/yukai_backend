@@ -748,6 +748,10 @@ Router::add("GET", "/api/device-status", function () {
     DeviceController::getDeviceStatus();
 }, true);
 
+Router::add("POST", "/api/reset-device", function () {
+    DeviceController::resetDevice();
+}, true);
+
 Router::add(
     "GET",
     "/api/get-public-keys",
@@ -758,7 +762,7 @@ Router::add(
 //report post
 Router::add(
     "POST",
-    "/api/reportPost",
+    "/api/report-post",
     fn() =>
     ReportController::reportPost(),
     true
@@ -766,7 +770,7 @@ Router::add(
 
 Router::add(
     "POST",
-    "/api/reportAcc",
+    "/api/report-account",
     fn() =>
     ReportController::reported_acc(),
     true
@@ -774,7 +778,7 @@ Router::add(
 /* ------get all reported posts----- */
 Router::add(
     "GET",
-    "/api/getReportedPosts",
+    "/api/get-reported-posts",
     fn() =>
     ReportController::getReporPosts(),
     true
@@ -783,7 +787,7 @@ Router::add(
 /* ------get all reported accounts----- */
 Router::add(
     "GET",
-    "/api/getReportedAccounts",
+    "/api/get-reported-accounts",
     fn() =>
     ReportController::getReportedAccounts(),
     true
@@ -794,7 +798,7 @@ Router::add(
     "GET",
     "/api/control-account",
     fn() =>
-    AdminController::accountStatus(),
+    AdminController::updateAccountStatus(),
     true
 );
 
@@ -832,7 +836,7 @@ Router::add(
 );
 Router::add(
     "POST",
-    "/api/forgetPassword",
+    "/api/admin-forget-password",
     fn() =>
     AdminController::forgetPassword(),
     false
@@ -911,3 +915,4 @@ Router::add(
     fn() => NotificationController::markAllAsRead(),
     true
 );
+
