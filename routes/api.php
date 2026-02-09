@@ -897,3 +897,4 @@ Router::add(
     fn() => NotificationController::markAllAsRead(),
     true
 );
+
