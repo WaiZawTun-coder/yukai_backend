@@ -592,7 +592,7 @@ class AdminController
                 "message" => "Invalid or expired OTP"
             ], 401);
         }
-
+        PasswordService::isStrong($newPassword);
         $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
         $stmt = $conn->prepare("UPDATE admin SET password = ? WHERE admin_id = ?");
         $stmt->bind_param("si", $hashedPassword, $admin_id);

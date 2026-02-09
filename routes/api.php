@@ -14,7 +14,7 @@ use App\Controllers\ChatController;
 use App\Controllers\MessageController;
 use App\Controllers\ReportController;
 
-use App\Controllers\AdminController;
+
 use App\Controllers\LoginHistoriesController;
 
 
@@ -836,7 +836,6 @@ Router::add(
     fn() =>
     AdminController::forgetPassword(),
     false
-<<<<<<< HEAD
  );
  
  //Admin
@@ -854,8 +853,7 @@ Router::add(
     AdminController::AdminLogin(),
     false
  );
-=======
-);
+
 Router::add(
     "POST",
     "/api/reset_password",
@@ -913,4 +911,3 @@ Router::add(
     fn() => NotificationController::markAllAsRead(),
     true
 );
->>>>>>> 0e5264aa2004c902e27170ba437dff471b88db5c
