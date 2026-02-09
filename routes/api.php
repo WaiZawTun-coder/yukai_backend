@@ -747,6 +747,10 @@ Router::add("GET", "/api/device-status", function () {
     DeviceController::getDeviceStatus();
 }, true);
 
+Router::add("POST", "/api/reset-device", function () {
+    DeviceController::resetDevice();
+}, true);
+
 Router::add(
     "GET",
     "/api/get-public-keys",

@@ -228,4 +228,31 @@ class DeviceController
             "has_keys" => true
         ]);
     }
+
+    public static function resetDevice()
+    {
+        $conn = Database::connect();
+        $user = Auth::getUser();
+        $me = $user["user_id"];
+
+        if (!$me) {
+            Response::json([
+                "status" => false,
+                "message" => "Unauthorized"
+            ]);
+            return;
+        }
+
+        $sql = "DELETE FROM devices WHERE user_id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $me);
+
+        $stmt->execute();
+
+        Response::json([
+            "status" => true,
+            "message" => "Device reset successful"
+        ]);
+        return;
+    }
 }

@@ -62,26 +62,57 @@ class SearchController
         if ($type === "all" || $type === "users") {
 
             $sql = "
-            SELECT u.user_id, u.username, u.display_name, u.profile_image, u.gender
-            FROM users u
-            WHERE u.display_name LIKE ?
-            AND is_active = 1
-            AND deactivate=0 
-            AND u.user_id != ?
-            AND NOT EXISTS (
-                SELECT 1
-                FROM blocks b
-                WHERE b.status = 1  AND (
-                    (b.blocker_user_id = ? AND b.blocked_user_id = u.user_id)
-                    OR
-                    (b.blocker_user_id = u.user_id AND b.blocked_user_id = ?)
-                )
-            )
-            LIMIT ? OFFSET ?
+            SELECT 
+    u.user_id,
+    u.username,
+    u.display_name,
+    u.profile_image,
+    u.gender,
+    
+    -- FRIENDSHIP STATUS
+    CASE 
+        WHEN f.status = 'accepted' THEN 'friends'
+        WHEN f.user_1_id = ? AND f.status = 'pending' THEN 'request_sent'
+        WHEN f.user_2_id = ? AND f.status = 'pending' THEN 'request_received'
+        ELSE 'none'
+    END AS friendship_status,
+
+    -- FOLLOWING STATUS
+    CASE 
+        WHEN fol.follower_user_id = ? THEN 'following'
+        ELSE 'not_following'
+    END AS following_status
+
+FROM users u
+
+-- LEFT JOIN friend requests
+LEFT JOIN friends f ON 
+    ( (f.user_1_id = ? AND f.user_2_id = u.user_id) 
+      OR (f.user_1_id = u.user_id AND f.user_2_id = ?) )
+
+-- LEFT JOIN following
+LEFT JOIN follows fol ON fol.following_user_id = u.user_id AND fol.follower_user_id = ?
+
+WHERE u.display_name LIKE ?               -- search term
+  AND u.is_active = 1
+  AND u.deactivate = 0
+  AND u.user_id != ?                       -- exclude current user
+  AND NOT EXISTS (                          -- exclude blocked users
+      SELECT 1
+      FROM blocks b
+      WHERE b.status = 1 AND (
+          (b.blocker_user_id = ? AND b.blocked_user_id = u.user_id)
+          OR
+          (b.blocker_user_id = u.user_id AND b.blocked_user_id = ?)
+      )
+  )
+
+LIMIT ? OFFSET ?;
+
         ";
 
             $stmt = $conn->prepare($sql);
-            $stmt->bind_param("siiiii", $search_word, $user_id, $user_id, $user_id, $limit, $offset);
+            $stmt->bind_param("iiiiiisiiiii", $user_id, $user_id, $user_id, $user_id, $user_id, $user_id, $search_word, $user_id, $user_id, $user_id, $limit, $offset);
             $stmt->execute();
             $users_result = $stmt->get_result();
 
@@ -95,7 +126,9 @@ class SearchController
                     "display_name" => $user["display_name"],
                     "username" => $user["username"],
                     "profile_image" => $user["profile_image"],
-                    "gender" => $user["gender"]
+                    "gender" => $user["gender"],
+                    "friendship_status" => $user["friendship_status"],
+                    "following_status" => $user["following_status"]
                 ];
             }
         }
