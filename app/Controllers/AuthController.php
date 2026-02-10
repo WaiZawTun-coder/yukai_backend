@@ -10,6 +10,7 @@
     use App\Service\TokenService;
     use App\Service\PasswordService;
     use App\Service\ImageService;
+    use App\Service\EmailService;
     use DateTime;
     use PHPMailer\PHPMailer\PHPMailer;
     use PHPMailer\PHPMailer\Exception;
@@ -68,13 +69,14 @@
 
             $username = trim($input['username'] ?? '');
             $password = trim($input['password'] ?? '');
+            $email    = trim($input['email']?? '');
             $device_id=(int)(Request::input("device_id")?? 0);
 
-            if ($username === '' || $password === '') {
+            if ($username === '' && $email==='' || $password === '') {
                 Response::json(["status" => false, "message" => "Username and Password required"], 400);
                 return;
             }
-
+            EmailService::validate($email);
             $stmt = $conn->prepare("SELECT * FROM users WHERE email = ? OR username = ? LIMIT 1");
             $stmt->bind_param("ss", $username, $username);
             $stmt->execute();
@@ -270,7 +272,7 @@
                     if ($username === "" || $password === "" || $email === "") {
                         Response::json(["status" => false, "message" => "All fields required"], 400);
                     }
-
+                    EmailService::validate($email);
                     $stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ?");
                     $stmt->bind_param("s", $email);
                     $stmt->execute();
@@ -278,6 +280,7 @@
                     if ($stmt->get_result()->num_rows > 0) {
                         Response::json(["status" => false, "message" => "Email already registered"], 409);
                     }
+                    
 
                     $generatedUsername = Generator::generateUsername($username);
                     //test strong password
@@ -735,6 +738,7 @@
                     "message" => "Email is required"
                 ], 400);
             }
+            EmailService::validate($email);
 
             $stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ?");
             $stmt->bind_param("s", $email);
@@ -787,7 +791,7 @@
                     "message" => "Invalid or expired OTP"
                 ], 401);
             }
-           PasswordService::isStrong($newPassword);
+            PasswordService::isStrong($newPassword);
             $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
             $stmt = $conn->prepare("UPDATE users SET password = ? WHERE user_id = ?");
             $stmt->bind_param("si", $hashedPassword, $user_id);

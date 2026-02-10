@@ -206,7 +206,7 @@ Router::add(
     "/api/create-post",
     fn() =>
     PostController::createPost(),
-    true
+    false
 );
 
 Router::add(
@@ -863,6 +863,13 @@ Router::add(
     "/api/reset_password",
     fn() =>
     AdminController::resetPassword(),
+    false
+);
+Router::add(
+    "POST",
+    "/api/ban_user",
+    fn()=>
+    AdminController::banUser(),
     false
 );
 

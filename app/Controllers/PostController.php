@@ -647,6 +647,17 @@ LIMIT ? OFFSET ?;
                 "message" => "Invalid creator"
             ], 400);
         }
+        $userSql="SELECT user_id,is_active from users where user_id=?";
+        $user   =$conn->prepare($userSql);
+        $user   ->bind_param("i",$creator_id);
+        $user   ->execute();
+        $userResult=$user->get_result()->fetch_assoc();
+        if((int)$userResult['is_active']===0){
+            Response::json([
+                "status"=>false,
+                "message"=>"you cannot create post(Inactive user)"
+            ]);
+        }
 
         // Start transaction
         $conn->begin_transaction();

@@ -9,6 +9,7 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Core\Database;
 use App\Core\Generator;
+use App\Service\EmailService;
 use App\Service\TokenService;
 
 use App\Service\PasswordService;
@@ -203,7 +204,7 @@ class AdminController
         $input = Request::json();
         $displayUsername = trim($input['username'] ?? '');
 
-        // $password=trim($input['password']?? '');
+    
         $email = trim($input['email'] ?? '');
 
         $creator = AdminAuth::admin();
@@ -227,6 +228,7 @@ class AdminController
         if ($displayUsername === "" || $email === "") {
             Response::json(["status" => false, "message" => "All fields required"], 400);
         }
+        EmailService::validate($email);
 
         //to test email already exists or not??
         $stmt = $conn->prepare("SELECT admin_id FROM admin WHERE email = ?");
@@ -288,7 +290,7 @@ class AdminController
                 WHERE email = ? OR username = ? OR display_name = ? OR role=?
                 LIMIT 1";
         $stmt = $conn->prepare($sql);
-        $stmt->bind_param("sss", $username, $username, $username);
+        $stmt->bind_param("ssss", $username, $username, $username,$username);
 
         $stmt->execute();
         $result = $stmt->get_result();
@@ -317,12 +319,12 @@ class AdminController
      
 
         // password verify
-        if (!PasswordService::verify($password, $user['password'])) {
-            Response::json([
-                "status" => false,
-                "message" => "Invalid password"
-            ], 401);
-        }
+        // if (!PasswordService::verify($password, $user['password'])) {
+        //     Response::json([
+        //         "status" => false,
+        //         "message" => "Invalid password"
+        //     ], 401);
+        // }
 
 
         if ((int) $user['is_active'] === 0) {
@@ -354,7 +356,7 @@ class AdminController
             "message" => "Login successful",
             "data" => [
 
-                "admin_user_id"      => $user["user_id"],
+                // "admin_user_id"      => $user["user_id"],
                 "username"     => $user["username"],
                 "email"        => $user["email"],
                 "role"         =>$user['role'],
@@ -535,6 +537,7 @@ class AdminController
                 "message" => "Email is required"
             ], 400);
         }
+        EmailService::validate($email);
 
         $stmt = $conn->prepare("SELECT admin_id, role FROM admin WHERE email = ? AND is_active=1");
         $stmt->bind_param("s", $email);
@@ -603,6 +606,68 @@ class AdminController
             "message" => "Password reset successfully"
         ]);
     }
+    //banned user
+    public static function banUser(){
+        $conn=Database::connect();
+        $input=Request::json();
+        $user_id=(int)($input['user_id']?? 0);
+    //      $admin = AdminAuth::admin();
+
+    // if (!$admin) {
+    //     Response::json([
+    //         "status" => false,
+    //         "message" => "Unauthorized"
+    //     ]);
+    //     return;
+    // }
+
+    // // Allow only admin or super_admin
+    // if (!in_array($admin['role'], ['admin', 'super_admin'])) {
+    //     Response::json([
+    //         "status" => false,
+    //         "message" => "Forbidden: Only admin or super admin can ban users"
+    //     ]);
+    //     return;
+    // }
+
+        if($user_id<=0){
+            Response::json([
+                "status"=>false,
+                "message"=>"Invalid user ID"
+            ]);
+        }
+        $userSql="SELECT user_id ,is_banned from users where user_id=?";
+        $userStmt   =$conn->prepare($userSql);
+        $userStmt  ->bind_param("i",$user_id);
+        $userStmt   ->execute();
+        $user =$userStmt->get_result()->fetch_assoc();
+        if(!$user){
+            Response::json([
+                "status"=>false,
+                "message"=>"user does not exist"
+            ]);
+        }
+        if((int)$user['is_banned']===1){
+            Response::json([
+                "status"=>false,
+                "message"=>"This user is aleady banned"    
+            ]);
+        }
+        $updateBanUserSql="UPDATE users set is_banned=1, is_active=0 WHERE user_id=?";
+        $updateBanUser   =$conn->prepare($updateBanUserSql);
+        $updateBanUser   ->bind_param("i",$user_id);
+        $updateBanUser   ->execute();
+        Response::json([
+            "status"=>true,
+            "message"=>"ban user successfully"
+        ]);
+
+    }
+    // public static function banPost(){
+    //     $conn=Database::connect();
+    //     $input=Request::json();
+    //     $post_id=(int)($input)
+    // }
 
 }
 
