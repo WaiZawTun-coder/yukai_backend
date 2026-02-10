@@ -532,5 +532,6 @@ class UserController
             ], 500);
         }
     }
+    
 
 }

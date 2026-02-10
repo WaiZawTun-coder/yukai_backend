@@ -112,6 +112,12 @@ Router::add(
     UserController::editUser(),
     true
 );
+Router::add(
+    "POST",
+    "/api/upload-image",
+    fn() => ImageController::uploadImage(),
+    true
+);
 
 Router::add(
     "POST",
