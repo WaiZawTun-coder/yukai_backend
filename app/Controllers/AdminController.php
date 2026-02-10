@@ -287,10 +287,10 @@ class AdminController
 
         $sql = "SELECT * FROM admin
 
-                WHERE email = ? OR username = ? OR display_name = ? OR role=?
+                WHERE email = ? OR username = ?
                 LIMIT 1";
         $stmt = $conn->prepare($sql);
-        $stmt->bind_param("ssss", $username, $username, $username,$username);
+        $stmt->bind_param("ss", $username, $username);
 
         $stmt->execute();
         $result = $stmt->get_result();
@@ -318,13 +318,13 @@ class AdminController
         }
      
 
-        // password verify
-        // if (!PasswordService::verify($password, $user['password'])) {
-        //     Response::json([
-        //         "status" => false,
-        //         "message" => "Invalid password"
-        //     ], 401);
-        // }
+        //password verify
+        if (!PasswordService::verify($password, $user['password'])) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid password"
+            ], 401);
+        }
 
 
         if ((int) $user['is_active'] === 0) {
@@ -335,13 +335,7 @@ class AdminController
             return;
         }
 
-         $accessToken = TokenService::generateAccessToken([
-        "admin_id" => $user['admin_id'],
-        "username" => $user['username'],
-        "role"     =>$user['role'],
-        
-    ]);
-
+     
 
         $accessToken = TokenService::generateAccessToken([
             "admin_id" => $user['admin_id'],
