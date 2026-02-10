@@ -171,7 +171,6 @@ class UserController
     // user edit
     public static function editUser()
     {
-
         $conn = Database::connect();
         $user_id = (int) (Request::input("user_id") ?? 0);
         $display_name = trim(Request::input("display_name") ?? "");
@@ -180,7 +179,6 @@ class UserController
         $profile_image = trim(Request::input("profile_image") ?? "");
         $cover_image = trim(Request::input("cover_image") ?? "");
         $phone_number = trim(Request::input("phone_number") ?? "");
-
 
         // Check user exists
         $sql = "SELECT * FROM users WHERE user_id = ?";
@@ -198,14 +196,13 @@ class UserController
         }
 
         $user = $result->fetch_assoc();
-        $updates = $updates ?? [];
-        $params = $params ?? [];
+        $updates = []; // Initialize as empty array
+        $params = [];  // Initialize as empty array
         $types = "";
 
         // =====================================
         // NORMAL PROFILE UPDATES
         // =====================================
-
 
         if (!empty($display_name)) {
             $updates[] = "display_name = ?";
@@ -238,7 +235,6 @@ class UserController
             $types .= "s";
         }
 
-
         // Nothing to update
         if (empty($updates)) {
             Response::json([
@@ -248,7 +244,6 @@ class UserController
             return;
         }
 
-
         $params[] = $user_id;
         $types .= "i";
 
@@ -256,7 +251,7 @@ class UserController
         $stmt = $conn->prepare($sql);
         $stmt->bind_param($types, ...$params);
 
-        if ($stmt->execute()) {
+        if ($stmt->execute()) {     
             if ($stmt->affected_rows > 0) {
                 Response::json([
                     "status" => true,
@@ -268,6 +263,12 @@ class UserController
                     "message" => "No changes were made"
                 ], 200);
             }
+        } else {
+            // THIS WAS MISSING! Handle execute() failure
+            Response::json([
+                "status" => false,
+                "message" => "Database error: " . $stmt->error
+            ], 500);
         }
     }
     //request Password OTP
@@ -335,16 +336,32 @@ class UserController
             return;
         }
 
-        if (empty($current_password) || empty($new_password) || empty($otpcode)) {
+        if (empty($current_password)) {
             Response::json([
                 "status" => false,
-                "message" => "Current password, new password and OTP are required"
+                "message" => "Current password is required"
+            ], 400);
+            return;
+        }
+
+        if (empty($new_password)) {
+            Response::json([
+                "status" => false,
+                "message" => "New password is required"
+            ], 400);
+            return;
+        }
+
+        if (empty($otpcode)) {
+            Response::json([
+                "status" => false,
+                "message" => "OTP code is required"
             ], 400);
             return;
         }
 
         // Check user exists
-        $stmt = $conn->prepare("SELECT password FROM users WHERE user_id = ?");
+        $stmt = $conn->prepare("SELECT password, email FROM users WHERE user_id = ?");
         $stmt->bind_param("i", $user_id);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -359,7 +376,7 @@ class UserController
 
         $user = $result->fetch_assoc();
 
-        // Verify current password
+        // 1. Verify current password
         if (!password_verify($current_password, $user['password'])) {
             Response::json([
                 "status" => false,
@@ -368,7 +385,7 @@ class UserController
             return;
         }
 
-        // Verify OTP
+        // 2. Verify OTP
         if (!AuthController::verifyOTP($user_id, $otpcode)) {
             Response::json([
                 "status" => false,
@@ -377,10 +394,10 @@ class UserController
             return;
         }
 
-        // Hash new password
+        // 3. Hash new password
         $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
 
-        // Update password
+        // 4. Update password
         $update = $conn->prepare("UPDATE users SET password = ? WHERE user_id = ?");
         $update->bind_param("si", $hashed_password, $user_id);
 

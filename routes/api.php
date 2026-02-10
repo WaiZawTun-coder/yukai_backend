@@ -128,13 +128,13 @@ Router::add(
     true
 );
 
-Router::add(
-    "POST",
-    "/api/change-password",
-    fn() =>
-    UserController::changepassword(),
-    true
-);
+    Router::add(
+        "POST",
+        "/api/change-password",
+        fn() =>
+        UserController::changepassword(),
+        true
+    );
 
 Router::add(
     "POST",
