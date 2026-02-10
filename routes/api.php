@@ -15,6 +15,7 @@ use App\Controllers\ReportController;
 
 use App\Controllers\AdminController;
 use App\Controllers\LoginHistoriesController;
+use App\Controllers\ImageController;
 
 
 use App\Core\Auth;

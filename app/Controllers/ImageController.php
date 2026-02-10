@@ -12,7 +12,7 @@ use App\Service\PasswordService;
 use App\Service\ImageService;
 use DateTime;
 
-class SearchController
+class ImageController
 {
     public static function uploadImage()
     {
