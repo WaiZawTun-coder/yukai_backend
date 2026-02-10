@@ -696,7 +696,7 @@ class AuthController
 
             $mail->CharSet = 'UTF-8';
 
-            $mail->setFrom($_ENV['GMAIL_USERNAME'], 'May Thingyan');
+            $mail->setFrom($_ENV['GMAIL_USERNAME'], 'Yukai Support Team');
             $mail->addAddress($email);
 
             $mail->isHTML(false);
