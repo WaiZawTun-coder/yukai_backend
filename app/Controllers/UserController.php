@@ -497,7 +497,7 @@ public static function generateOTPApi()
             "message" => "Failed to generate OTP"
         ], 500);
         return;
-    }
+    }       
     
     // In production: Send OTP via email/SMS here
     // For now, just return success
