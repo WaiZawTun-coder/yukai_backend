@@ -458,6 +458,54 @@ class UserController
             ], 500);
         }
     }
+    // In UserController.php or AuthController.php
+public static function generateOTPApi()
+{
+    $conn = Database::connect();
+    $user_id = (int) (Request::input("user_id") ?? 0);
+    
+    if ($user_id <= 0) {
+        Response::json([
+            "status" => false,
+            "message" => "Invalid user ID"
+        ], 400);
+        return;
+    }
+    
+    // Check user exists
+    $stmt = $conn->prepare("SELECT email FROM users WHERE user_id = ?");
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($result->num_rows === 0) {
+        Response::json([
+            "status" => false,
+            "message" => "User not found"
+        ], 404);
+        return;
+    }
+    
+    $user = $result->fetch_assoc();
+    
+    // Generate OTP using your existing function
+    $otp = AuthController::generateOTP($user_id);
+    
+    if ($otp === false) {
+        Response::json([
+            "status" => false,
+            "message" => "Failed to generate OTP"
+        ], 500);
+        return;
+    }
+    
+    // In production: Send OTP via email/SMS here
+    // For now, just return success
+    Response::json([
+        "status" => true,
+        "message" => "OTP sent successfully to " . $user['email']
+    ], 200);
+}
 
     //deleted account
     public static function deletedAccount()

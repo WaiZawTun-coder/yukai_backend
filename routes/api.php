@@ -135,6 +135,12 @@ Router::add(
         UserController::changepassword(),
         true
     );
+Router::add(
+    "POST",
+    "/api/generate-otp-api",
+    fn() => UserController::generateOTPApi(), // or AuthController::generateOTPApi
+    true
+);
 
 Router::add(
     "POST",
