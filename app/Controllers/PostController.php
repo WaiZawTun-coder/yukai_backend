@@ -634,10 +634,18 @@ LIMIT ? OFFSET ?;
 
         $creator_id = (int) (Request::input("creator_id") ?? 0);
         $content = trim(Request::input("content") ?? '');
-        $privacy = Request::input("privacy") ?? 'public';
+        // $privacy = Request::input("privacy") ?? 'public';
         $shared_post_id = Request::input("shared_post_id") ?? null;
         $is_draft = (int) (Request::input("is_draft") ?? 0);
         $is_archived = (int) (Request::input("is_archived") ?? 0);
+        $requested_privacy = Request::input("privacy");
+        if ($requested_privacy) {
+            // User specified privacy for this post
+            $privacy = $requested_privacy;
+        } else {
+            // Use user's default privacy setting
+            $privacy = self::getUserDefaultPrivacy($creator_id);
+        }
 
         $tag_friends = Request::input("tag_friends") ?? [];
 
@@ -852,6 +860,20 @@ LIMIT ? OFFSET ?;
         }
     }
 
+        private static function getUserDefaultPrivacy($userId) {
+        $conn = Database::connect();
+        $sql = "SELECT default_privacy FROM user_privacy_settings WHERE user_id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $userId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if ($row = $result->fetch_assoc()) {
+            return $row['default_privacy'];
+        }
+        
+        return 'public'; // Default value
+    }
     /* =====================================================
      * Edit Post
      * ===================================================== */

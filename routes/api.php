@@ -16,6 +16,7 @@ use App\Controllers\ReportController;
 use App\Controllers\AdminController;
 use App\Controllers\LoginHistoriesController;
 use App\Controllers\ImageController;
+use App\Controllers\PrivacyController;
 
 
 use App\Core\Auth;
@@ -904,5 +905,19 @@ Router::add(
     "POST",
     "/api/mark-notifications-read",
     fn() => NotificationController::markAllAsRead(),
+    true
+);
+// Add these routes:
+Router::add(
+    "GET",
+    "/api/user/privacy/default",
+    fn() => PrivacyController::getDefault(),
+    true
+);
+
+Router::add(
+    "POST",
+    "/api/user/privacy/default",
+    fn() => PrivacyController::updateDefault(),
     true
 );
