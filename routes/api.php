@@ -40,7 +40,7 @@ Router::add(
     "/auth/login",
     fn() =>
     AuthController::login(),
-    false
+    true
 );
 
 Router::add(
