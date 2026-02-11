@@ -861,7 +861,7 @@ Router::add(
 Router::add(
     "POST",
     "/api/ban_post",
-    fn() => 
+    fn(): void => 
     AdminController::banPost(),
     true
 );
