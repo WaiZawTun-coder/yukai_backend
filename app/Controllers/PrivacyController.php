@@ -7,7 +7,8 @@ use App\Core\Response;
 use App\Core\Request;
 class PrivacyController {
     
-    // Get user's default privacy setting
+    
+    
     public static function getDefault() {
         $userId = $_SESSION['user_id'] ?? 0;
         
@@ -19,8 +20,20 @@ class PrivacyController {
         }
         
         $conn = Database::connect();
+        // Select the yukai database
+        $conn->select_db("yukai");
+        
         $sql = "SELECT default_privacy FROM user_privacy_settings WHERE user_id = ?";
         $stmt = $conn->prepare($sql);
+        
+        if (!$stmt) {
+            error_log("SQL Error in getDefault: " . $conn->error);
+            return json_encode([
+                "status" => true,
+                "default_privacy" => 'public'
+            ]);
+        }
+        
         $stmt->bind_param("i", $userId);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -44,7 +57,7 @@ class PrivacyController {
         if (!$userId) {
             return json_encode([
                 "status" => false,
-                "message" => "Not logged in"
+                "message" => "Not authenticated"
             ], 401);
         }
         
@@ -62,6 +75,8 @@ class PrivacyController {
         }
         
         $conn = Database::connect();
+        // Select the yukai database
+        $conn->select_db("yukai");
         
         // Insert or update
         $sql = "INSERT INTO user_privacy_settings (user_id, default_privacy) 
@@ -69,6 +84,15 @@ class PrivacyController {
                 ON DUPLICATE KEY UPDATE default_privacy = ?";
         
         $stmt = $conn->prepare($sql);
+        
+        if (!$stmt) {
+            error_log("SQL Error in updateDefault: " . $conn->error);
+            return json_encode([
+                "status" => false,
+                "message" => "Database error"
+            ], 500);
+        }
+        
         $stmt->bind_param("iss", $userId, $privacy, $privacy);
         $success = $stmt->execute();
         

@@ -867,8 +867,18 @@ LIMIT ? OFFSET ?;
 
 private static function getUserDefaultPrivacy($userId) {
     $conn = Database::connect();
+    
+    // Make sure we're using the yukai database
+    $conn->select_db("yukai");
+    
     $sql = "SELECT default_privacy FROM user_privacy_settings WHERE user_id = ?";
     $stmt = $conn->prepare($sql);
+    
+    if (!$stmt) {
+        error_log("SQL Error: " . $conn->error);
+        return 'public'; // Fallback
+    }
+    
     $stmt->bind_param("i", $userId);
     $stmt->execute();
     $result = $stmt->get_result();
