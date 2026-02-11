@@ -843,21 +843,7 @@ Router::add(
  );
  
  //Admin
- Router::add(
-    "POST",
-    "/api/RegisterAdmin",
-    fn()=>
-    AdminController::AdminRegister(),
-    false
- );
- Router::add(
-    "POST",
-    "/api/AdminLogin",
-    fn()=>
-    AdminController::AdminLogin(),
-    false
- );
-
+ 
 Router::add(
     "POST",
     "/api/reset_password",
@@ -870,6 +856,20 @@ Router::add(
     "/api/ban_user",
     fn()=>
     AdminController::banUser(),
+    true
+);
+Router::add(
+    "POST",
+    "/api/ban_post",
+    fn() => 
+    AdminController::banPost(),
+    true
+);
+Router::add(
+    "POST",
+    "/api/edit_admin_profile",
+    fn() =>
+    AdminController::editAdminProfile(),
     false
 );
 
