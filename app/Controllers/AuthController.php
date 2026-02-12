@@ -565,9 +565,11 @@ class AuthController
         ]);
     }
     // generate OTP 
-    public static function generateOTP($user_id)
+    public static function generateOTP()
     {
         $conn = Database::connect();
+        $user = Auth::getUser();
+        $user_id = $user['user_id'];
 
 
         $otpcode = '';
@@ -597,16 +599,6 @@ class AuthController
             return false;
         }
 
-        // Response::json([
-        //     "status" => true,
-        //     "message" => "Added Successfully",
-        //     "data" => [
-        //         // "otp code"=>$otpcode,
-        //         "otp_id" => $conn->insert_id,
-        //         "expires_in_minutes" => $expiryMinutes,
-        //         "otp-code"=>$otpcode
-        //     ]
-        // ]);
         return $otpcode;
     }
 

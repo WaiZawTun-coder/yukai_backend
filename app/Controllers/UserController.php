@@ -5,6 +5,7 @@ use App\Core\Auth;
 use App\Core\Database;
 use App\Core\Response;
 use App\Core\Request;
+use App\Service\ImageService;
 
 class UserController
 {
@@ -177,8 +178,9 @@ class UserController
         $display_name = trim(Request::input("display_name") ?? "");
         $email = trim(Request::input("email") ?? "");
         $bio = trim(Request::input("bio") ?? "");
-        $profile_image = trim(Request::input("profile_image") ?? "");
-        $cover_image = trim(Request::input("cover_image") ?? "");
+        // $profile_image = trim(Request::input("profile_image") ?? "");
+        $profile_image = Request::file("profile_image");
+        $cover_image = Request::file("cover_image");
         $phone_number = trim(Request::input("phone_number") ?? "");
 
 
@@ -223,13 +225,31 @@ class UserController
             $types .= "s";
         }
         if (!empty($profile_image)) {
+            $profileImageUResult = ImageService::uploadImage($profile_image);
+            $profileImageUrl = $profileImageUResult["secure_url"] ?? "";
+            if ($profileImageUrl == "") {
+                Response::json([
+                    "status" => false,
+                    "message" => "Failed to upload profile image"
+                ], 500);
+                return;
+            }
             $updates[] = "profile_image = ?";
-            $params[] = $profile_image;
+            $params[] = $profileImageUrl;
             $types .= "s";
         }
         if (!empty($cover_image)) {
+            $coverImageResult = ImageService::uploadImage($cover_image);
+            $coverImageUrl = $coverImageResult["secure_url"] ?? "";
+            if ($coverImageUrl == "") {
+                Response::json([
+                    "status" => false,
+                    "message" => "Failed to upload cover image"
+                ], 500);
+                return;
+            }
             $updates[] = "cover_image = ?";
-            $params[] = $cover_image;
+            $params[] = $coverImageUrl;
             $types .= "s";
         }
         if (!empty($phone_number)) {
@@ -273,7 +293,8 @@ class UserController
     //request Password OTP
     public static function requestPasswordOTP()
     {
-        $user_id = (int) (Request::input("user_id") ?? 0);
+        $user = Auth::getUser();
+        $user_id = $user["user_id"];
         $conn = Database::connect();
 
         // Check user exists
@@ -321,7 +342,8 @@ class UserController
     {
 
         $conn = Database::connect();
-        $user_id = (int) (Request::input("user_id") ?? 0);
+        $user = Auth::getUser();
+        $user_id = $user["user_id"];
         $current_password = trim(Request::input("current_password") ?? "");
         $new_password = trim(Request::input("new_password") ?? "");
         $otpcode = trim(Request::input("otpcode") ?? "");
@@ -335,10 +357,10 @@ class UserController
             return;
         }
 
-        if (empty($current_password) || empty($new_password) || empty($otpcode)) {
+        if ((empty($current_password) && empty($otpcode)) || empty($new_password)) {
             Response::json([
                 "status" => false,
-                "message" => "Current password, new password and OTP are required"
+                "message" => "Current password or OTP and new password are required"
             ], 400);
             return;
         }
@@ -360,21 +382,24 @@ class UserController
         $user = $result->fetch_assoc();
 
         // Verify current password
-        if (!password_verify($current_password, $user['password'])) {
-            Response::json([
-                "status" => false,
-                "message" => "Current password is incorrect"
-            ], 401);
-            return;
+        if ($current_password) {
+            if (!password_verify($current_password, $user['password'])) {
+                Response::json([
+                    "status" => false,
+                    "message" => "Current password is incorrect"
+                ], 401);
+                return;
+            }
         }
-
         // Verify OTP
-        if (!AuthController::verifyOTP($user_id, $otpcode)) {
-            Response::json([
-                "status" => false,
-                "message" => "OTP verification failed"
-            ], 401);
-            return;
+        else if ($otpcode) {
+            if (!AuthController::verifyOTP($user_id, $otpcode)) {
+                Response::json([
+                    "status" => false,
+                    "message" => "OTP verification failed"
+                ], 401);
+                return;
+            }
         }
 
         // Hash new password
