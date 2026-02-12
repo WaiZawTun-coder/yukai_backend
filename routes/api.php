@@ -201,6 +201,14 @@ Router::add(
 );
 
 Router::add(
+    "GET",
+    "/api/get-draft-post",
+    fn() =>
+    PostController::getDraftedPost(),
+    true
+);
+
+Router::add(
     "POST",
     "/api/create-post",
     fn() =>

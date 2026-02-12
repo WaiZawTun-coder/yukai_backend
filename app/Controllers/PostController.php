@@ -104,80 +104,96 @@ class PostController
 
         /* -------------------- SQL -------------------- */
 
-        $sql = "
-        SELECT 
-            p.post_id,
-            p.creator_user_id,
-            p.shared_post_id,
-            p.privacy,
-            p.content,
-            p.is_archived,
-            p.is_draft,
-            p.is_deleted,
-            p.is_shared,
-            p.created_at,
-            p.updated_at,
-    
-            u.display_name,
-            u.username,
-            u.gender,
-            u.profile_image,
-    
-            COUNT(DISTINCT r.post_react_id) AS react_count,
-            COUNT(DISTINCT c.post_comment_id) AS comment_count,
-            (COUNT(DISTINCT r.post_react_id) + COUNT(DISTINCT c.post_comment_id)) AS total_engagement,
-    
-            CASE 
-                WHEN COUNT(ur.post_react_id) > 0 THEN 1
-                ELSE 0
-            END AS is_liked,
-    
-            MAX(ur.reaction) AS reaction
-    
-        FROM posts p
-        JOIN users u 
-            ON u.user_id = p.creator_user_id
-    
-        LEFT JOIN post_reacts r 
-            ON r.post_id = p.post_id
-    
-        LEFT JOIN post_comments c 
-            ON c.post_id = p.post_id
-    
-        -- Current user's reaction
-        LEFT JOIN post_reacts ur 
-            ON ur.post_id = p.post_id
-           AND ur.user_id = ?
-    
-        -- Hidden posts
-        LEFT JOIN hide_posts hp
-            ON hp.post_id = p.post_id
-           AND hp.user_id = ?
-    
-        WHERE p.is_deleted = 0
-          AND p.is_archived = 0
-          AND hp.post_id IS NULL
-    
-          -- 🔐 PRIVACY FILTER
-          AND (
-                p.privacy = 'public'
-    
-             OR (p.privacy = 'friends' AND EXISTS (
-                    SELECT 1 
-                    FROM friends f
-                    WHERE f.status = 'accepted'
-                      AND (
-                            (f.user_1_id = p.creator_user_id AND f.user_2_id = ?)
-                         OR (f.user_2_id = p.creator_user_id AND f.user_1_id = ?)
-                      )
-             ))
-    
-             OR (p.privacy = 'private' AND p.creator_user_id = ?)
-          )
-    
-        GROUP BY p.post_id
-        ORDER BY total_engagement DESC, p.created_at DESC
-        LIMIT ? OFFSET ?
+        $sql = "SELECT 
+    p.post_id,
+    p.creator_user_id,
+    p.shared_post_id,
+    p.privacy,
+    p.content,
+    p.is_archived,
+    p.is_draft,
+    p.is_deleted,
+    p.is_shared,
+    p.created_at,
+    p.updated_at,
+
+    u.display_name,
+    u.username,
+    u.gender,
+    u.profile_image,
+
+    COUNT(DISTINCT r.post_react_id) AS react_count,
+    COUNT(DISTINCT c.post_comment_id) AS comment_count,
+
+    (COUNT(DISTINCT r.post_react_id) + COUNT(DISTINCT c.post_comment_id)) AS total_engagement,
+
+    -- Weighted engagement
+    (
+        COUNT(DISTINCT r.post_react_id) * 1 +
+        COUNT(DISTINCT c.post_comment_id) * 3
+    ) AS weighted_engagement,
+
+    -- Feed ranking score (engagement + time decay)
+    (
+        (
+            COUNT(DISTINCT r.post_react_id) * 1 +
+            COUNT(DISTINCT c.post_comment_id) * 3
+        ) 
+        /
+        POW(TIMESTAMPDIFF(HOUR, p.created_at, NOW()) + 2, 1.4)
+    ) AS feed_score,
+
+    CASE 
+        WHEN COUNT(ur.post_react_id) > 0 THEN 1
+        ELSE 0
+    END AS is_liked,
+
+    MAX(ur.reaction) AS reaction
+
+FROM posts p
+JOIN users u 
+    ON u.user_id = p.creator_user_id
+
+LEFT JOIN post_reacts r 
+    ON r.post_id = p.post_id
+
+LEFT JOIN post_comments c 
+    ON c.post_id = p.post_id
+
+LEFT JOIN post_reacts ur 
+    ON ur.post_id = p.post_id
+   AND ur.user_id = ?
+
+LEFT JOIN hide_posts hp
+    ON hp.post_id = p.post_id
+   AND hp.user_id = ?
+
+WHERE p.is_deleted = 0
+  AND p.is_archived = 0
+  AND p.is_draft = 0
+  AND hp.post_id IS NULL
+
+  AND (
+        p.privacy = 'public'
+
+     OR (p.privacy = 'friends' AND EXISTS (
+            SELECT 1 
+            FROM friends f
+            WHERE f.status = 'accepted'
+              AND (
+                    (f.user_1_id = p.creator_user_id AND f.user_2_id = ?)
+                 OR (f.user_2_id = p.creator_user_id AND f.user_1_id = ?)
+              )
+     ))
+
+     OR (p.privacy = 'private' AND p.creator_user_id = ?)
+  )
+
+GROUP BY p.post_id
+
+ORDER BY feed_score DESC, p.created_at DESC
+LIMIT ? OFFSET ?;
+
     ";
 
 
@@ -254,7 +270,7 @@ class PostController
         $limit = 5;
         $offset = ($page - 1) * $limit;
 
-        $user_id = $user?->user_id ?? 0;
+        $user_id = (int) ($user["user_id"] ?? 0);
 
         $sql = "SELECT 
     p.post_id,
@@ -284,41 +300,56 @@ FROM posts p
 JOIN users cu 
     ON cu.user_id = p.creator_user_id
 
--- total reactions per post
 LEFT JOIN (
     SELECT post_id, COUNT(*) AS react_count
     FROM post_reacts
     GROUP BY post_id
 ) r ON r.post_id = p.post_id
 
--- total comments per post
 LEFT JOIN (
     SELECT post_id, COUNT(*) AS comment_count
     FROM post_comments
     GROUP BY post_id
 ) c ON c.post_id = p.post_id
 
--- current user's reaction
 LEFT JOIN post_reacts ur
     ON ur.post_id = p.post_id
    AND ur.user_id = ?
 
- LEFT JOIN hide_posts hp
-        ON hp.post_id = p.post_id
-       AND hp.user_id = ?
+LEFT JOIN hide_posts hp
+    ON hp.post_id = p.post_id
+   AND hp.user_id = ?
 
 WHERE p.is_deleted = 0
   AND p.is_archived = 0
+  AND p.is_draft = 0
   AND cu.username = ?
-  AND hp.post_id IS NULL 
+  AND hp.post_id IS NULL
+  AND (
+        p.privacy = 'public'
+        OR (
+            p.privacy = 'friends'
+            AND EXISTS (
+                SELECT 1
+                FROM friends f
+                WHERE f.status = 'accepted'
+                  AND (
+                        (f.user_1_id = p.creator_user_id AND f.user_2_id = ?)
+                     OR (f.user_2_id = p.creator_user_id AND f.user_1_id = ?)
+                  )
+            )
+        )
+        OR (p.privacy = 'private' AND p.creator_user_id = ?)
+  )
 
 ORDER BY p.created_at DESC
 LIMIT ? OFFSET ?;
 
+
     ";
 
         $stmt = $conn->prepare($sql);
-        $stmt->bind_param("iisii", $user_id, $user_id, $username, $limit, $offset);
+        $stmt->bind_param("iisiiiii", $user_id, $user_id, $username, $user_id, $user_id, $user_id, $limit, $offset);
         $stmt->execute();
 
         $result = $stmt->get_result();
@@ -386,8 +417,7 @@ LIMIT ? OFFSET ?;
         $limit = 5;
         $offset = ($page - 1) * $limit;
 
-        $sql = "
-        SELECT 
+        $sql = "SELECT 
             p.post_id,
             p.creator_user_id,
             p.shared_post_id,
@@ -408,6 +438,22 @@ LIMIT ? OFFSET ?;
             COUNT(DISTINCT r.post_react_id) AS react_count,
             COUNT(DISTINCT c.post_comment_id) AS comment_count,
             (COUNT(DISTINCT r.post_react_id) + COUNT(DISTINCT c.post_comment_id)) AS total_engagement,
+
+            -- Weighted engagement
+            (
+                COUNT(DISTINCT r.post_react_id) * 1 +
+                COUNT(DISTINCT c.post_comment_id) * 3
+            ) AS weighted_engagement,
+            
+            -- Feed ranking score (engagement + time decay)
+            (
+                (
+                    COUNT(DISTINCT r.post_react_id) * 1 +
+                    COUNT(DISTINCT c.post_comment_id) * 3
+                ) 
+                /
+                POW(TIMESTAMPDIFF(HOUR, p.created_at, NOW()) + 2, 1.4)
+            ) AS feed_score,
 
             CASE 
                 WHEN COUNT(ur.post_react_id) > 0 THEN 1
@@ -441,7 +487,23 @@ LIMIT ? OFFSET ?;
 
         WHERE p.is_deleted = 0
           AND p.is_archived = 0
+          AND p.is_draft = 0
           AND hp.post_id IS NULL
+
+          AND (
+            p.privacy = 'public'
+            OR (p.privacy = 'friends' AND EXISTS (
+                SELECT 1
+                FROM friends f
+                WHERE f.status = 'accepted'
+                    AND (
+                        (f.user_1_id = p.creator_user_id AND f.user_2_id = ?)
+                        OR (f.user_2_id = p.creator_user_id AND f.user_1_id = ?)
+                    )
+            ))
+
+            OR (p.privacy = 'private' AND p.creator_user_id = ?)
+          )
 
         GROUP BY p.post_id
         ORDER BY total_engagement DESC, p.created_at DESC
@@ -456,7 +518,7 @@ LIMIT ? OFFSET ?;
             ], 500);
         }
 
-        $stmt->bind_param("iiiii", $user_id, $user_id, $user_id, $limit, $offset);
+        $stmt->bind_param("iiiiiiii", $user_id, $user_id, $user_id, $user_id, $user_id, $user_id, $limit, $offset);
         $stmt->execute();
         $result = $stmt->get_result();
 
@@ -508,7 +570,8 @@ LIMIT ? OFFSET ?;
     {
         $conn = Database::connect();
         // $post_id = (int) ($post_id ?? 0);
-        $post_id = (int) $_GET["post_id"] ?? 0;
+        $post_id = (int) ($_GET["post_id"] ?? 0);
+
 
         if ($post_id == 0) {
             Response::json([
@@ -528,62 +591,189 @@ LIMIT ? OFFSET ?;
             return;
         }
 
-        $sql = "
-                SELECT 
-                p.post_id,
-                p.creator_user_id,
-                p.shared_post_id,
-                p.privacy,
-                p.content,
-                p.is_archived,
-                p.is_draft,
-                p.is_deleted,
-                p.is_shared,
-                p.created_at,
-                p.updated_at,
+        $sql = "SELECT 
+    p.post_id,
+    p.creator_user_id,
+    p.shared_post_id,
+    p.privacy,
+    p.content,
+    p.is_archived,
+    p.is_draft,
+    p.is_deleted,
+    p.is_shared,
+    p.created_at,
+    p.updated_at,
 
-                u.display_name,
-                u.gender,
-                u.profile_image,
-                u.username,
+    u.display_name,
+    u.gender,
+    u.profile_image,
+    u.username,
 
-                COUNT(DISTINCT r.post_react_id) AS react_count,
-                COUNT(DISTINCT c.post_comment_id) AS comment_count,
+    (
+        SELECT COUNT(*) 
+        FROM post_reacts pr 
+        WHERE pr.post_id = p.post_id
+    ) AS react_count,
 
-                CASE 
-                    WHEN COUNT(ur.post_react_id) > 0 THEN 1
-                    ELSE 0
-                END AS is_liked,
+    (
+        SELECT COUNT(*) 
+        FROM post_comments pc 
+        WHERE pc.post_id = p.post_id
+    ) AS comment_count,
 
-                MAX(ur.reaction) AS reaction
+    CASE 
+        WHEN ur.post_react_id IS NOT NULL THEN 1
+        ELSE 0
+    END AS is_liked,
 
-                FROM posts p
-                JOIN users u 
-                    ON u.user_id = p.creator_user_id
+    ur.reaction
 
-                LEFT JOIN post_reacts r 
-                    ON r.post_id = p.post_id
+FROM posts p
+JOIN users u 
+    ON u.user_id = p.creator_user_id
 
-                LEFT JOIN post_comments c 
-                    ON c.post_id = p.post_id
+LEFT JOIN post_reacts ur 
+    ON ur.post_id = p.post_id
+   AND ur.user_id = ?
 
-                LEFT JOIN post_reacts ur 
-                    ON ur.post_id = p.post_id
-                AND ur.user_id = ?
+LEFT JOIN hide_posts hp
+    ON hp.post_id = p.post_id
+   AND hp.user_id = ?
 
-                WHERE 
-                    p.post_id = ?
-                    AND p.is_deleted = 0
-                    AND (
-                        p.privacy = 'public'
-                        OR p.creator_user_id = ?
-                    )
+WHERE 
+    p.post_id = ?
+    AND p.is_deleted = 0
+    AND p.is_archived = 0
+    AND p.is_draft = 0
+    AND hp.post_id IS NULL
+    AND (
+        p.privacy = 'public'
+        OR (p.privacy = 'friends' AND EXISTS (
+            SELECT 1 FROM friends f
+            WHERE f.status = 'accepted'
+              AND (
+                    (f.user_1_id = p.creator_user_id AND f.user_2_id = ?)
+                 OR (f.user_2_id = p.creator_user_id AND f.user_1_id = ?)
+              )
+        ))
+        OR (p.privacy = 'private' AND p.creator_user_id = ?)
+        OR p.creator_user_id = ?
+    );
 
-                GROUP BY p.post_id
         ";
 
         $stmt = $conn->prepare($sql);
-        $stmt->bind_param("iii", $user_id, $post_id, $user_id);
+        $stmt->bind_param("iiiiiii", $user_id, $user_id, $post_id, $user_id, $user_id, $user_id, $user_id);
+        $stmt->execute();
+
+        $result = $stmt->get_result();
+        $post = $result->fetch_assoc();
+
+        if (!$post) {
+            Response::json([
+                "status" => false,
+                "message" => "Post not found or access denied"
+            ], 404);
+            return;
+        }
+
+        $post["creator"] = [
+            "id" => $post["creator_user_id"],
+            "display_name" => $post["display_name"],
+            "gender" => $post["gender"],
+            "profile_image" => $post["profile_image"]
+        ];
+
+        unset(
+            $post["display_name"],
+            $post["gender"],
+            $post["profile_image"],
+            $post["username"]
+        );
+        $posts = [
+            $post["post_id"] => $post
+        ];
+
+        self::attachAttachments($conn, $posts);
+        self::attachTaggedUsers($conn, $posts);
+
+        Response::json([
+            "status" => true,
+            "data" => array_values($posts)
+        ]);
+    }
+
+    public static function getDraftedPost()
+    {
+        $conn = Database::connect();
+
+        $user = Auth::getUser();
+        $user_id = $user["user_id"] ?? 0;
+
+        if ($user_id <= 0) {
+            Response::json([
+                "status" => false,
+                "message" => "User not authenticated"
+            ], 401);
+            return;
+        }
+
+        $sql = "SELECT 
+    p.post_id,
+    p.creator_user_id,
+    p.shared_post_id,
+    p.privacy,
+    p.content,
+    p.is_archived,
+    p.is_draft,
+    p.is_deleted,
+    p.is_shared,
+    p.created_at,
+    p.updated_at,
+
+    u.display_name,
+    u.gender,
+    u.profile_image,
+    u.username,
+
+    (
+        SELECT COUNT(*) 
+        FROM post_reacts pr 
+        WHERE pr.post_id = p.post_id
+    ) AS react_count,
+
+    (
+        SELECT COUNT(*) 
+        FROM post_comments pc 
+        WHERE pc.post_id = p.post_id
+    ) AS comment_count,
+
+    CASE 
+        WHEN ur.post_react_id IS NOT NULL THEN 1
+        ELSE 0
+    END AS is_liked,
+
+    ur.reaction
+
+FROM posts p
+JOIN users u 
+    ON u.user_id = p.creator_user_id
+
+LEFT JOIN post_reacts ur 
+    ON ur.post_id = p.post_id
+   AND ur.user_id = ?
+
+WHERE 
+    p.creator_user_id = ?
+    AND p.is_deleted = 0
+    AND p.is_archived = 0
+    AND p.is_draft = 1
+ORDER BY p.updated_at DESC LIMIT 1;
+
+        ";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("ii", $user_id, $user_id);
         $stmt->execute();
 
         $result = $stmt->get_result();
@@ -631,13 +821,24 @@ LIMIT ? OFFSET ?;
     public static function createPost()
     {
         $conn = Database::connect();
+        $user = Auth::getUser();
+        $creator_id = $user["user_id"];
 
-        $creator_id = (int) (Request::input("creator_id") ?? 0);
+        if (!$creator_id) {
+            Response::json([
+                "status" => false,
+                "message" => "Unauthentication"
+            ]);
+            return;
+        }
+
         $content = trim(Request::input("content") ?? '');
         $privacy = Request::input("privacy") ?? 'public';
         $shared_post_id = Request::input("shared_post_id") ?? null;
         $is_draft = (int) (Request::input("is_draft") ?? 0);
         $is_archived = (int) (Request::input("is_archived") ?? 0);
+
+        $post_id = (int) (Request::input("post_id") ?? 0);
 
         $tag_friends = Request::input("tag_friends") ?? [];
 
@@ -655,27 +856,41 @@ LIMIT ? OFFSET ?;
             // =============================
             // Insert post
             // =============================
-            $sql = "INSERT INTO posts 
+            if ($post_id !== 0) {
+                $sql = "UPDATE posts SET content = ?, privacy = ?, is_draft = ? WHERE post_id = ?";
+
+                $stmt = $conn->prepare($sql);
+                $stmt->bind_param(
+                    "ssii",
+                    $content,
+                    $privacy,
+                    $is_draft,
+                    $post_id
+                );
+            } else {
+                $sql = "INSERT INTO posts 
                     (creator_user_id, content, privacy, shared_post_id, is_draft, is_archived, is_deleted, is_shared, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, 0, ?, NOW())";
 
-            $is_shared = $shared_post_id ? 1 : 0;
+                $is_shared = $shared_post_id ? 1 : 0;
 
-            $stmt = $conn->prepare($sql);
-            $stmt->bind_param(
-                "issiiii",
-                $creator_id,
-                $content,
-                $privacy,
-                $shared_post_id,
-                $is_draft,
-                $is_archived,
-                $is_shared
-            );
+                $stmt = $conn->prepare($sql);
+                $stmt->bind_param(
+                    "issiiii",
+                    $creator_id,
+                    $content,
+                    $privacy,
+                    $shared_post_id,
+                    $is_draft,
+                    $is_archived,
+                    $is_shared
+                );
+            }
 
             $stmt->execute();
 
-            $post_id = $conn->insert_id;
+            if ($post_id == 0)
+                $post_id = $conn->insert_id;
 
             // =============================
             // Handle post_attachments (optional)
@@ -868,11 +1083,8 @@ LIMIT ? OFFSET ?;
         $who_can_comment = trim(Request::input("who_can_comment") ?? "");
         $who_can_react = trim(Request::input("who_can_react") ?? "");
         $who_can_share = trim(Request::input("who_can_share") ?? "");
-
-
-
-
-
+        $content = trim(Request::input("content") ?? "");
+        $shared_post_id = (int) (Request::input("shared_post_id") ?? 0);
 
         if ($post_id === 0) {
             Response::json([
@@ -913,6 +1125,18 @@ LIMIT ? OFFSET ?;
         if ($who_can_share) {
             $fields[] = "who_can_share = ?";
             $params[] = $who_can_share;
+            $types .= "s";
+        }
+
+        if ($content) {
+            $fields[] = "content = ?";
+            $params[] = $content;
+            $types .= "s";
+        }
+
+        if ($shared_post_id) {
+            $fields[] = "shared_post_id = ?";
+            $params[] = $shared_post_id;
             $types .= "s";
         }
 
@@ -1760,10 +1984,9 @@ GROUP BY p.post_id
     public static function getPostsByFriends()
     {
         $conn = Database::connect();
-        // $user = Auth::getUser();
-        // $user_id = $user["user_id"] ?? 0;
+        $user = Auth::getUser();
+        $user_id = (int) ($user["user_id"] ?? 0);
         $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
-        $user_id = (int) (Request::input("user_id") ?? 0);
         $limit = 5;
         $offset = ($page - 1) * $limit;
         $sql = "SELECT 
@@ -1778,6 +2001,7 @@ GROUP BY p.post_id
                 p.is_shared,
                 p.created_at,
                 p.updated_at,
+
                 u.display_name,
                 u.gender,
                 u.profile_image,
@@ -1787,6 +2011,22 @@ GROUP BY p.post_id
                 COUNT(DISTINCT c.post_comment_id) AS comment_count,
                 (COUNT(DISTINCT r.post_react_id) + COUNT(DISTINCT c.post_comment_id)) AS total_engagement,
 
+                -- Weighted engagement
+                (
+                    COUNT(DISTINCT r.post_react_id) * 1 +
+                    COUNT(DISTINCT c.post_comment_id) * 3
+                ) AS weighted_engagement,
+
+                -- Feed ranking score (engagement + time decay)
+                (
+                    (
+                        COUNT(DISTINCT r.post_react_id) * 1 +
+                        COUNT(DISTINCT c.post_comment_id) * 3
+                    ) 
+                    /
+                    POW(TIMESTAMPDIFF(HOUR, p.created_at, NOW()) + 2, 1.4)
+                ) AS feed_score,
+
                 CASE 
                     WHEN COUNT(ur.post_react_id) > 0 THEN 1
                     ELSE 0
@@ -1795,23 +2035,46 @@ GROUP BY p.post_id
                 MAX(ur.reaction) AS reaction
 
                 FROM posts p
-                JOIN users u ON u.user_id = p.creator_user_id
-                JOIN friends f
-                ON (f.user_1_id = ? AND f.user_2_id = p.creator_user_id)
-                OR (f.user_2_id = ? AND f.user_1_id = p.creator_user_id)
-                LEFT JOIN post_reacts r ON r.post_id = p.post_id
-                LEFT JOIN post_comments c ON c.post_id = p.post_id
-                LEFT JOIN post_reacts ur 
-                ON ur.post_id = p.post_id 
+                JOIN users u
+                    ON u.user_id = p.creator_user_id
+                LEFT JOIN post_reacts r
+                    ON r.post_id = p.post_id
+                LEFT JOIN post_comments c
+                    ON c.post_id = p.post_id
+
+                LEFT JOIN post_reacts ur
+                    ON ur.post_id = p.post_id
+                    AND ur.user_id = ?
+
+                LEFT JOIN hide_posts hp
+                    ON hp.post_id = p.post_id
+                    AND hp.user_id = ?
+
                 WHERE p.is_deleted = 0
-                
-                GROUP BY p.post_id
-                ORDER BY total_engagement DESC, p.created_at DESC
-                LIMIT ? OFFSET ?
+                    AND p.is_archived = 0
+                    AND p.is_draft = 0
+                    AND hp.post_id IS NULL
+                    AND p.creator_user_id != ?
+
+                    AND (
+                        p.privacy = 'public'
+                        OR (p.privacy = 'friends' AND EXISTS (
+                            SELECT 1 FROM friends f WHERE f.status = 'accepted'
+                                AND (
+                                    (f.user_1_id = p.creator_user_id AND f.user_2_id = ?)
+                                    OR (f.user_2_id = p.creator_user_id AND f.user_1_id = ?)
+                                )
+                        ))
+                        OR (p.privacy='private' AND p.creator_user_id = ?)
+                    )
+
+                    GROUP BY p.post_id
+                    ORDER BY total_engagement DESC, p.created_at DESC
+                    LIMIT ? OFFSET ?
 
         ";
         $stmtSave = $conn->prepare($sql);
-        $stmtSave->bind_param("iiii", $user_id, $user_id, $limit, $offset);
+        $stmtSave->bind_param("iiiiiiii", $user_id, $user_id, $user_id, $user_id, $user_id, $user_id, $limit, $offset);
         $stmtSave->execute();
 
         if ($stmtSave->error) {
@@ -1841,7 +2104,7 @@ GROUP BY p.post_id
 
             $row['attachments'] = [];
             $row["tagged_users"] = [];
-            $posts[$row['post_id']][] = $row;
+            $posts[$row['post_id']] = $row;
         }
 
         PostController::attachAttachments($conn, $posts);
