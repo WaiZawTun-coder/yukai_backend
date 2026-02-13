@@ -1266,8 +1266,7 @@ ORDER BY p.updated_at DESC LIMIT 1;
                 "status" => true,
                 "message" => "Post created successfully",
                 "post_id" => $post_id,
-                "privacy_used" => $requested_privacy ? 'custom' : 'default',
-                "privacy_value" => $privacy,
+                "privacy" => $privacy,
                 "data" => array_values($posts)
             ]);
 
