@@ -765,7 +765,7 @@ class AuthController
         if (!$user) {
             Response::json([
                 "status" => false,
-                "message" => "User not found"
+                "message" => "This email is not registered in our system."
             ], 404);
         }
 
@@ -810,7 +810,7 @@ class AuthController
 
         $getUserIdResult = $getUserIdStmt->get_result();
         $user_id = $getUserIdResult->fetch_assoc()["user_id"];
-
+        PasswordService::isStrong($newPassword);
 
         if (!self::verifyOTP($user_id, $otpcode)) {
             Response::json([
@@ -818,11 +818,12 @@ class AuthController
                 "message" => "Invalid or expired OTP"
             ], 401);
         }
-        PasswordService::isStrong($newPassword);
+
         $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
         $stmt = $conn->prepare("UPDATE users SET password = ? WHERE user_id = ?");
         $stmt->bind_param("si", $hashedPassword, $user_id);
         $stmt->execute();
+
 
         Response::json([
             "status" => true,
