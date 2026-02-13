@@ -2053,18 +2053,18 @@ GROUP BY p.post_id
                 "message" => "Cannot find post"
             ], 500);
         }
-        $postSql="SELECT post_id,is_banned from posts where post_id=?";
-        $postStmt  =$conn->prepare($postSql);
-        $postStmt->bind_param("i",$post_id);
-        $postStmt ->execute();
-        $post=$postStmt->get_result()->fetch_assoc();
-        if((int)$post['is_banned']===1){
+        $postSql = "SELECT post_id,is_banned from posts where post_id=?";
+        $postStmt = $conn->prepare($postSql);
+        $postStmt->bind_param("i", $post_id);
+        $postStmt->execute();
+        $post = $postStmt->get_result()->fetch_assoc();
+        if ((int) $post['is_banned'] === 1) {
             Response::json([
-                "status"=>false,
-                "message"=>"you cannot comment this post(isBanned)"
+                "status" => false,
+                "message" => "you cannot comment this post(isBanned)"
             ]);
         }
-        
+
 
         $sql = "Insert into post_comments(post_id,user_id,comment) values (?,?,?)";
 
@@ -2319,9 +2319,7 @@ GROUP BY p.post_id
                     AND hp.post_id IS NULL
                     AND p.creator_user_id != ?
 
-                    AND (
-                        p.privacy = 'public'
-                        OR (p.privacy = 'friends' AND EXISTS (
+                    AND ((p.privacy = 'friends' AND EXISTS (
                             SELECT 1 FROM friends f WHERE f.status = 'accepted'
                                 AND (
                                     (f.user_1_id = p.creator_user_id AND f.user_2_id = ?)
