@@ -5,6 +5,7 @@ use App\Core\Auth;
 use App\Core\Database;
 use App\Core\Response;
 use App\Core\Request;
+use App\Service\ImageService;
 
 class UserController
 {
@@ -176,8 +177,9 @@ class UserController
         $display_name = trim(Request::input("display_name") ?? "");
         $email = trim(Request::input("email") ?? "");
         $bio = trim(Request::input("bio") ?? "");
-        $profile_image = trim(Request::input("profile_image") ?? "");
-        $cover_image = trim(Request::input("cover_image") ?? "");
+        // $profile_image = trim(Request::input("profile_image") ?? "");
+        $profile_image = Request::file("profile_image");
+        $cover_image = Request::file("cover_image");
         $phone_number = trim(Request::input("phone_number") ?? "");
 
         // Check user exists
@@ -220,13 +222,31 @@ class UserController
             $types .= "s";
         }
         if (!empty($profile_image)) {
+            $profileImageUResult = ImageService::uploadImage($profile_image);
+            $profileImageUrl = $profileImageUResult["secure_url"] ?? "";
+            if ($profileImageUrl == "") {
+                Response::json([
+                    "status" => false,
+                    "message" => "Failed to upload profile image"
+                ], 500);
+                return;
+            }
             $updates[] = "profile_image = ?";
-            $params[] = $profile_image;
+            $params[] = $profileImageUrl;
             $types .= "s";
         }
         if (!empty($cover_image)) {
+            $coverImageResult = ImageService::uploadImage($cover_image);
+            $coverImageUrl = $coverImageResult["secure_url"] ?? "";
+            if ($coverImageUrl == "") {
+                Response::json([
+                    "status" => false,
+                    "message" => "Failed to upload cover image"
+                ], 500);
+                return;
+            }
             $updates[] = "cover_image = ?";
-            $params[] = $cover_image;
+            $params[] = $coverImageUrl;
             $types .= "s";
         }
         if (!empty($phone_number)) {
@@ -251,7 +271,7 @@ class UserController
         $stmt = $conn->prepare($sql);
         $stmt->bind_param($types, ...$params);
 
-        if ($stmt->execute()) {     
+        if ($stmt->execute()) {
             if ($stmt->affected_rows > 0) {
                 Response::json([
                     "status" => true,
@@ -274,7 +294,8 @@ class UserController
     //request Password OTP
     public static function requestPasswordOTP()
     {
-        $user_id = (int) (Request::input("user_id") ?? 0);
+        $user = Auth::getUser();
+        $user_id = $user["user_id"];
         $conn = Database::connect();
 
         // Check user exists
@@ -322,7 +343,8 @@ class UserController
     {
 
         $conn = Database::connect();
-        $user_id = (int) (Request::input("user_id") ?? 0);
+        $user = Auth::getUser();
+        $user_id = $user["user_id"];
         $current_password = trim(Request::input("current_password") ?? "");
         $new_password = trim(Request::input("new_password") ?? "");
         $otpcode = trim(Request::input("otpcode") ?? "");
@@ -336,26 +358,10 @@ class UserController
             return;
         }
 
-        if (empty($current_password)) {
+        if ((empty($current_password) && empty($otpcode)) || empty($new_password)) {
             Response::json([
                 "status" => false,
-                "message" => "Current password is required"
-            ], 400);
-            return;
-        }
-
-        if (empty($new_password)) {
-            Response::json([
-                "status" => false,
-                "message" => "New password is required"
-            ], 400);
-            return;
-        }
-
-        if (empty($otpcode)) {
-            Response::json([
-                "status" => false,
-                "message" => "OTP code is required"
+                "message" => "Current password or OTP and new password are required"
             ], 400);
             return;
         }
@@ -376,22 +382,25 @@ class UserController
 
         $user = $result->fetch_assoc();
 
-        // 1. Verify current password
-        if (!password_verify($current_password, $user['password'])) {
-            Response::json([
-                "status" => false,
-                "message" => "Current password is incorrect"
-            ], 401);
-            return;
+        // Verify current password
+        if ($current_password) {
+            if (!password_verify($current_password, $user['password'])) {
+                Response::json([
+                    "status" => false,
+                    "message" => "Current password is incorrect"
+                ], 401);
+                return;
+            }
         }
-
-        // 2. Verify OTP
-        if (!AuthController::verifyOTP($user_id, $otpcode)) {
-            Response::json([
-                "status" => false,
-                "message" => "OTP verification failed"
-            ], 401);
-            return;
+        // Verify OTP
+        else if ($otpcode) {
+            if (!AuthController::verifyOTP($user_id, $otpcode)) {
+                Response::json([
+                    "status" => false,
+                    "message" => "OTP verification failed"
+                ], 401);
+                return;
+            }
         }
 
         // 3. Hash new password
@@ -459,53 +468,53 @@ class UserController
         }
     }
     // In UserController.php or AuthController.php
-public static function generateOTPApi()
-{
-    $conn = Database::connect();
-    $user_id = (int) (Request::input("user_id") ?? 0);
-    
-    if ($user_id <= 0) {
-        Response::json([
-            "status" => false,
-            "message" => "Invalid user ID"
-        ], 400);
-        return;
-    }
-    
-    // Check user exists
-    $stmt = $conn->prepare("SELECT email FROM users WHERE user_id = ?");
-    $stmt->bind_param("i", $user_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
+    public static function generateOTPApi()
+    {
+        $conn = Database::connect();
+        $user_id = (int) (Request::input("user_id") ?? 0);
 
-    if ($result->num_rows === 0) {
+        if ($user_id <= 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid user ID"
+            ], 400);
+            return;
+        }
+
+        // Check user exists
+        $stmt = $conn->prepare("SELECT email FROM users WHERE user_id = ?");
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        if ($result->num_rows === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "User not found"
+            ], 404);
+            return;
+        }
+
+        $user = $result->fetch_assoc();
+
+        // Generate OTP using your existing function
+        $otp = AuthController::generateOTP($user_id);
+
+        if ($otp === false) {
+            Response::json([
+                "status" => false,
+                "message" => "Failed to generate OTP"
+            ], 500);
+            return;
+        }
+
+        // In production: Send OTP via email/SMS here
+        // For now, just return success
         Response::json([
-            "status" => false,
-            "message" => "User not found"
-        ], 404);
-        return;
+            "status" => true,
+            "message" => "OTP sent successfully to " . $user['email']
+        ], 200);
     }
-    
-    $user = $result->fetch_assoc();
-    
-    // Generate OTP using your existing function
-    $otp = AuthController::generateOTP($user_id);
-    
-    if ($otp === false) {
-        Response::json([
-            "status" => false,
-            "message" => "Failed to generate OTP"
-        ], 500);
-        return;
-    }       
-    
-    // In production: Send OTP via email/SMS here
-    // For now, just return success
-    Response::json([
-        "status" => true,
-        "message" => "OTP sent successfully to " . $user['email']
-    ], 200);
-}
 
     //deleted account
     public static function deletedAccount()
@@ -597,6 +606,6 @@ public static function generateOTPApi()
             ], 500);
         }
     }
-    
+
 
 }

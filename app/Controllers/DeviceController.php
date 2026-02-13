@@ -53,10 +53,26 @@ class DeviceController
         $signedPreKeyPub = base64_decode($input["signed_prekey_pub"], true);
         $signedPreKeySig = base64_decode($input["signed_prekey_sig"], true);
 
-        if ($identityKeyPub === false || $signedPreKeyPub === false || $signedPreKeySig === false) {
+        if ($identityKeyPub === false) {
             Response::json([
                 "status" => false,
-                "message" => "Invalid base64 key data"
+                "message" => "Invalid base64 key data identityKeyPub"
+            ], 400);
+            return;
+        }
+
+        if ($signedPreKeyPub === false) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid base64 key data signedPreKeyPub"
+            ], 400);
+            return;
+        }
+
+        if ($signedPreKeySig === false) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid base64 key data signedPreKeySig"
             ], 400);
             return;
         }
@@ -211,5 +227,32 @@ class DeviceController
             "status" => true,
             "has_keys" => true
         ]);
+    }
+
+    public static function resetDevice()
+    {
+        $conn = Database::connect();
+        $user = Auth::getUser();
+        $me = $user["user_id"];
+
+        if (!$me) {
+            Response::json([
+                "status" => false,
+                "message" => "Unauthorized"
+            ]);
+            return;
+        }
+
+        $sql = "DELETE FROM devices WHERE user_id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $me);
+
+        $stmt->execute();
+
+        Response::json([
+            "status" => true,
+            "message" => "Device reset successful"
+        ]);
+        return;
     }
 }

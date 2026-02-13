@@ -35,7 +35,7 @@ class AuthController
         $userSql = "
             SELECT user_id, username, display_name, gender, email,
                    phone_number, profile_image, cover_image, birthday,
-                   location, is_active, last_seen, default_audience
+                   location, is_active, last_seen, default_audience, completed_step
             FROM users
             WHERE user_id = ?
         ";
@@ -68,7 +68,7 @@ class AuthController
 
         $username = trim($input['username'] ?? '');
         $password = trim($input['password'] ?? '');
-        $device_id=(int)(Request::input("device_id")?? 0);
+        $device_id = (int) (Request::input("device_id") ?? 0);
 
         if ($username === '' || $password === '') {
             Response::json(["status" => false, "message" => "Username and Password required"], 400);
@@ -565,9 +565,11 @@ class AuthController
         ]);
     }
     // generate OTP 
-    public static function generateOTP($user_id)
+    public static function generateOTP()
     {
         $conn = Database::connect();
+        $user = Auth::getUser();
+        $user_id = $user['user_id'];
 
 
         $otpcode = '';
@@ -597,16 +599,6 @@ class AuthController
             return false;
         }
 
-        // Response::json([
-        //     "status" => true,
-        //     "message" => "Added Successfully",
-        //     "data" => [
-        //         // "otp code"=>$otpcode,
-        //         "otp_id" => $conn->insert_id,
-        //         "expires_in_minutes" => $expiryMinutes,
-        //         "otp-code"=>$otpcode
-        //     ]
-        // ]);
         return $otpcode;
     }
 
@@ -696,7 +688,7 @@ class AuthController
 
             $mail->CharSet = 'UTF-8';
 
-            $mail->setFrom($_ENV['GMAIL_USERNAME'], 'May Thingyan');
+            $mail->setFrom($_ENV['GMAIL_USERNAME'], 'Yukai Support Team');
             $mail->addAddress($email);
 
             $mail->isHTML(false);
@@ -768,16 +760,26 @@ class AuthController
     {
         $conn = Database::connect();
 
-        $user_id = (int) (Request::input("user_id") ?? 0);
-        $otpcode = trim(Request::input("otp_code") ?? "");
-        $newPassword = Request::input("new_password") ?? "";
+        // $user_id = (int) (Request::input("user_id") ?? 0);
+        $email = trim(Request::input("email") ?? "");
+        $otpcode = trim(Request::input("otp") ?? "");
+        $newPassword = Request::input("password") ?? "";
 
-        if (!$user_id || $otpcode === "" || $newPassword === "") {
+        if (!$email || $otpcode === "" || $newPassword === "") {
             Response::json([
                 "status" => false,
                 "message" => "All fields are required"
             ], 400);
         }
+
+        $getUserId = "SELECT user_id FROM users where email=?";
+        $getUserIdStmt = $conn->prepare($getUserId);
+        $getUserIdStmt->bind_param("s", $email);
+        $getUserIdStmt->execute();
+
+        $getUserIdResult = $getUserIdStmt->get_result();
+        $user_id = $getUserIdResult->fetch_assoc()["user_id"];
+
 
         if (!self::verifyOTP($user_id, $otpcode)) {
             Response::json([

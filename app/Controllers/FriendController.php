@@ -148,7 +148,7 @@ class FriendController
         $user = Auth::getUser();
         $me = (int) $user["user_id"];
 
-        $sql = "SELECT u.user_id, u.username, u.display_name, u.gender, u.profile_image from follows JOIN users u ON u.user_id = f.following_user_id WHERE f.following_user_id = ? AND f.status = 1 ORDER BY u.display_name ASC";
+        $sql = "SELECT u.user_id, u.username, u.display_name, u.gender, u.profile_image from follows f JOIN users u ON u.user_id = f.follower_user_id WHERE f.following_user_id = ? AND f.status = 1 ORDER BY u.display_name ASC";
 
         $stmt = $conn->prepare($sql);
         $stmt->bind_param("i", $me);
