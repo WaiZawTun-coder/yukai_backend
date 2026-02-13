@@ -163,19 +163,16 @@ class AuthController
 
         $expireAt = date("Y-m-d H:i:s", time() + 60 * 60 * 24 * 7);
 
+        // Save hashed refresh token to refresh_tokens table
         $stmt = $conn->prepare("
-        UPDATE users 
-        SET refresh_token = ?, refresh_token_expire_time = ?
-        WHERE user_id = ?
-    ");
-        $stmt->bind_param("ssi", $refreshHash, $expireAt, $user['user_id']);
+    INSERT INTO refresh_tokens (user_id, device_id, token_hash, issued_at, expires_at)
+    VALUES (?, ?, ?, NOW(), ?)
+");
+        $stmt->bind_param("isss", $user['user_id'], $device_id, $refreshHash, $expireAt);
         $stmt->execute();
 
-        $isSecure =
-            (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-            || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
-
-
+        // Set cookie
+        $isSecure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
         setcookie("refresh_token", $refreshToken, [
             "expires" => time() + 60 * 60 * 24 * 7,
             "path" => "/",
@@ -201,22 +198,38 @@ class AuthController
             return;
         }
 
-        // Validate device
-        // $stmt = $conn->prepare("SELECT id FROM devices WHERE id = ?");
-        // $stmt->bind_param("i", $device_id);
-        // $stmt->execute();
-        // if ($stmt->get_result()->num_rows === 0) {
-        //     Response::json(["status" => false, "message" => "Device not found"]);
-        //     return;
-        // }
+        if ($device_id) {
 
-        // Login history
-        //     $stmt = $conn->prepare("
-        //     INSERT INTO login_histories (user_id, device_id, logged_in_time)
-        //     VALUES (?, ?, NOW())
-        // ");
-        //     $stmt->bind_param("ii", $user['user_id'], $device_id);
-        //     $stmt->execute();
+            // Validate device belongs to user
+            $stmt = $conn->prepare("
+                SELECT device_id 
+                FROM devices 
+                WHERE device_id = ? AND user_id = ?
+                LIMIT 1
+            ");
+            $stmt->bind_param("si", $device_id, $user['user_id']);
+            $stmt->execute();
+
+            if ($stmt->get_result()->num_rows > 0) {
+
+                // Insert login history
+                $stmt = $conn->prepare("
+                    INSERT INTO login_histories (user_id, device_id, logged_in_time)
+                    VALUES (?, ?, NOW())
+                ");
+                $stmt->bind_param("is", $user['user_id'], $device_id);
+                $stmt->execute();
+
+                // Update last_seen_at
+                $stmt = $conn->prepare("
+                    UPDATE devices 
+                    SET last_seen_at = NOW(), is_active = 1
+                    WHERE device_id = ?
+                ");
+                $stmt->bind_param("s", $device_id);
+                $stmt->execute();
+            }
+        }
 
         Response::json([
             "status" => true,
@@ -469,6 +482,7 @@ class AuthController
             || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
 
         $refreshToken = $_COOKIE["refresh_token"] ?? null;
+        $device_id = Request::input("device_id") ?? "";
 
         if (!$refreshToken) {
             Response::json([
@@ -480,10 +494,12 @@ class AuthController
 
         $refreshHash = hash("sha256", $refreshToken);
 
+        // Lookup in refresh_tokens table
         $stmt = $conn->prepare("
-        SELECT user_id, username, refresh_token_expire_time
-        FROM users
-        WHERE refresh_token = ?
+        SELECT rt.id, rt.user_id, rt.expires_at, u.username
+        FROM refresh_tokens rt
+        JOIN users u ON u.user_id = rt.user_id
+        WHERE rt.token_hash = ? AND rt.revoked = 0
         LIMIT 1
     ");
         $stmt->bind_param("s", $refreshHash);
@@ -491,6 +507,7 @@ class AuthController
         $result = $stmt->get_result();
 
         if ($result->num_rows === 0) {
+            // Invalid token
             setcookie("refresh_token", "", [
                 "expires" => time() - 3600,
                 "path" => "/",
@@ -506,15 +523,14 @@ class AuthController
             return;
         }
 
-        $user = $result->fetch_assoc();
+        $tokenData = $result->fetch_assoc();
 
-        if (strtotime($user["refresh_token_expire_time"]) < time()) {
-
-            $delete = $conn->prepare(
-                "UPDATE users SET refresh_token = NULL WHERE user_id = ?"
-            );
-            $delete->bind_param("i", $user["user_id"]);
-            $delete->execute();
+        // Check expiry
+        if (strtotime($tokenData["expires_at"]) < time()) {
+            // Revoke expired token
+            $stmt = $conn->prepare("UPDATE refresh_tokens SET revoked = 1 WHERE id = ?");
+            $stmt->bind_param("i", $tokenData["id"]);
+            $stmt->execute();
 
             setcookie("refresh_token", "", [
                 "expires" => time() - 3600,
@@ -531,21 +547,26 @@ class AuthController
             return;
         }
 
-        // Rotate refresh token
+        // Rotate refresh token (generate new one)
         $refreshPayload = TokenService::generateRefreshToken();
         $newRefreshToken = $refreshPayload["token"];
         $newRefreshHash = $refreshPayload["hash"];
+        $newExpire = date("Y-m-d H:i:s", time() + 604800); // 7 days
 
-        $newExpire = date("Y-m-d H:i:s", time() + 604800);
-
-        $update = $conn->prepare("
-        UPDATE users
-        SET refresh_token = ?, refresh_token_expire_time = ?
-        WHERE user_id = ?
+        // Insert new refresh token
+        $stmt = $conn->prepare("
+        INSERT INTO refresh_tokens (user_id, device_id, token_hash, issued_at, expires_at)
+        VALUES (?, ?, ?,NOW(), ?)
     ");
-        $update->bind_param("ssi", $newRefreshHash, $newExpire, $user["user_id"]);
-        $update->execute();
+        $stmt->bind_param("isss", $tokenData["user_id"], $device_id, $newRefreshHash, $newExpire);
+        $stmt->execute();
 
+        // Revoke old token
+        $stmt = $conn->prepare("UPDATE refresh_tokens SET revoked = 1 WHERE id = ?");
+        $stmt->bind_param("i", $tokenData["id"]);
+        $stmt->execute();
+
+        // Set cookie for client
         setcookie("refresh_token", $newRefreshToken, [
             "expires" => time() + 604800,
             "path" => "/",
@@ -554,7 +575,11 @@ class AuthController
             "samesite" => $isSecure ? "None" : "Lax"
         ]);
 
-        $accessToken = TokenService::generateAccessToken(["user_id" => $user["user_id"], "username" => $user["username"]]);
+        // Generate new access token
+        $accessToken = TokenService::generateAccessToken([
+            "user_id" => $tokenData["user_id"],
+            "username" => $tokenData["username"]
+        ]);
 
         Response::json([
             "status" => true,
@@ -565,12 +590,14 @@ class AuthController
         ]);
     }
     // generate OTP 
-    public static function generateOTP()
+    public static function generateOTP($user_id)
     {
         $conn = Database::connect();
-        $user = Auth::getUser();
-        $user_id = $user['user_id'];
 
+        if (!$user_id) {
+            $user = Auth::getUser();
+            $user_id = $user['user_id'];
+        }
 
         $otpcode = '';
         for ($i = 0; $i < 8; $i++) {
@@ -873,5 +900,246 @@ class AuthController
                 "access_token" => $accessToken
             ]
         ]);
+    }
+
+    public static function getLoginActivity()
+    {
+        $user = Auth::getUser();
+        $user_id = $user["user_id"];
+
+        if (!$user_id) {
+            Response::json([
+                "status" => false,
+                "message" => "Not Authorized"
+            ], 400);
+            return;
+        }
+
+        $conn = Database::connect();
+
+        // Get latest login per device
+        $sql = "
+        SELECT 
+            d.id,
+            d.device_name,
+            d.platform,
+            d.device_id,
+            d.is_trusted,
+            d.is_active,
+            d.last_seen_at,
+            lh.logged_in_time
+        FROM devices d
+        LEFT JOIN login_histories lh 
+            ON lh.device_id = d.device_id
+        WHERE d.user_id = ?
+        ORDER BY lh.logged_in_time DESC
+        LIMIT 20
+    ";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        $sessions = [];
+
+        while ($row = $result->fetch_assoc()) {
+
+            $sessions[] = [
+                "id" => $row["id"],
+                "device" => $row["device_name"],
+                "platform" => $row["platform"],
+                "login_time" => $row["logged_in_time"],
+                "last_seen" => $row["last_seen_at"],
+                "is_trusted" => (bool) $row["is_trusted"],
+                "is_active" => (bool) $row["is_active"]
+            ];
+        }
+
+        Response::json([
+            "status" => true,
+            "sessions" => $sessions
+        ]);
+    }
+
+    public static function verifyOTPRoute()
+    {
+        $user = Auth::getUser();
+        $user_id = $user["user_id"];
+
+        $input = Request::json();
+        $otp = trim($input["otp"] ?? "");
+        $device_id = $input["device_id"] ?? null;
+
+        if (!$user_id) {
+            Response::json([
+                "status" => false,
+                "message" => "Not Authorized"
+            ], 401);
+            return;
+        }
+
+        if (!$otp) {
+            Response::json([
+                "status" => false,
+                "message" => "OTP is required"
+            ], 400);
+            return;
+        }
+
+        // Verify OTP
+        $result = self::verifyOTP($user_id, $otp);
+
+        if (!$result) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid or expired OTP"
+            ], 400);
+            return;
+        }
+
+        $conn = Database::connect();
+
+        // Get user info again
+        $stmt = $conn->prepare("SELECT * FROM users WHERE user_id = ? LIMIT 1");
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $userData = $stmt->get_result()->fetch_assoc();
+
+        // Generate final access token
+        $accessToken = TokenService::generateAccessToken([
+            "user_id" => $userData['user_id'],
+            "username" => $userData['username'],
+            "two_factor_verified" => true
+        ]);
+
+        // Generate refresh token
+        $refreshPayload = TokenService::generateRefreshToken();
+        $refreshToken = $refreshPayload["token"];
+        $refreshHash = $refreshPayload["hash"];
+
+        $expireAt = date("Y-m-d H:i:s", time() + 60 * 60 * 24 * 7);
+
+        $device_id = (string) (Request::input("device_id") ?? null);
+
+        $stmt = $conn->prepare("
+        INSERT INTO refresh_tokens (user_id, device_id, token_hash, issued_at, expires_at)
+        VALUES (?, ?, ?, NOW(), ?)
+    ");
+        $stmt->bind_param("isss", $user['user_id'], $device_id, $refreshHash, $expireAt);
+        $stmt->execute();
+
+        $isSecure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
+        setcookie("refresh_token", $refreshToken, [
+            "expires" => time() + 60 * 60 * 24 * 7,
+            "path" => "/",
+            "secure" => $isSecure,
+            "httponly" => true,
+            "samesite" => $isSecure ? "None" : "Lax"
+        ]);
+
+        // Insert login history (important)
+        if ($device_id) {
+
+            $stmt = $conn->prepare("
+            INSERT INTO login_histories (user_id, device_id, logged_in_time)
+            VALUES (?, ?, NOW())
+        ");
+            $stmt->bind_param("is", $user_id, $device_id);
+            $stmt->execute();
+
+            $stmt = $conn->prepare("
+            UPDATE devices 
+            SET last_seen_at = NOW(), is_active = 1
+            WHERE device_id = ?
+        ");
+            $stmt->bind_param("s", $device_id);
+            $stmt->execute();
+        }
+
+        Response::json([
+            "status" => true,
+            "message" => "OTP verification successful",
+            "data" => [
+                "user_id" => $userData["user_id"],
+                "username" => $userData["username"],
+                "email" => $userData["email"],
+                "display_name" => $userData["display_name"],
+                "gender" => $userData["gender"],
+                "phone_number" => $userData["phone_number"],
+                "profile_image" => $userData["profile_image"],
+                "cover_image" => $userData["cover_image"],
+                "birthday" => $userData["birthday"],
+                "location" => $userData["location"],
+                "is_active" => $userData["is_active"],
+                "last_seen" => $userData["last_seen"],
+                "completed_step" => $userData["completed_step"],
+                "access_token" => $accessToken
+            ]
+        ]);
+    }
+
+    public static function getLoggedInDevices()
+    {
+        $user = Auth::getUser();
+        $user_id = $user["user_id"];
+
+        $conn = Database::connect();
+        $sql = "SELECT * FROM devices WHERE user_id = ? AND is_active = 1";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $user_id);
+
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $response = [];
+
+        while ($row = $result->fetch_assoc()) {
+            $response[] = [
+                "device_name" => $row["device_name"],
+                "platform" => $row["platform"],
+                "last_logged_in" => $row["last_seen_at"],
+            ];
+        }
+
+        Response::json([
+            "status" => true,
+            "data" => $response
+        ]);
+    }
+
+    public static function logoutAllDevices()
+    {
+        $user = Auth::getUser();
+        $user_id = $user["user_id"];
+
+        $device_id = trim(Request::input("device_id") ?? "");
+
+        if (!$user_id) {
+            Response::json([
+                "status" => false,
+                "message" => "Not Authorized"
+            ], 400);
+            return;
+        }
+
+        $conn = Database::connect();
+        $sql = "UPDATE refresh_tokens SET revoked = 1 WHERE user_id = ? AND device_id != ? AND revoked = 0";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("is", $user_id, $device_id);
+
+        $success = $stmt->execute();
+        if ($success) {
+            Response::json([
+                'status' => true,
+                "message" => "Logged out from all other devices"
+            ]);
+            return;
+        } else {
+            Response::json([
+                "status" => false,
+                "message" => "Failed to logout from all devices"
+            ], 500);
+            return;
+        }
     }
 }

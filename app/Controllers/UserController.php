@@ -556,7 +556,7 @@ class UserController
         } else {
             Response::json([
                 "status" => false,
-                "message" => "Failed to deleted userr account"
+                "message" => "Failed to deleted user account"
             ], 500);
         }
     }
@@ -607,5 +607,33 @@ class UserController
         }
     }
 
+    public static function getAccountHealth()
+    {
+        $user = Auth::getUser();
+        $user_id = $user["user_id"];
+
+        if (!$user_id) {
+            Response::json([
+                "status" => false,
+                "message" => "Not Authorized"
+            ], 400);
+            return;
+        }
+
+        $conn = Database::connect();
+        $sql = "SELECT status FROM users WHERE user_id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        $row = $result->fetch_assoc();
+
+        Response::json([
+            "status" => true,
+            "account_health" => $row["status"]
+        ]);
+        return;
+    }
 
 }

@@ -41,7 +41,7 @@ Router::add(
     "/auth/login",
     fn() =>
     AuthController::login(),
-    true
+    false
 );
 
 Router::add(
@@ -703,9 +703,9 @@ Router::add("GET", "/api/get-people-you-may-know", function () {
 // AuthController::generateOTP();
 // }, true); // generate otp 
 
-// Router::add("POST", "/auth/verifyOTP", function () {
-// AuthController::verifyOTP();
-// }, true); // verify otp
+Router::add("POST", "/auth/verify-otp", function () {
+    AuthController::verifyOTPRoute();
+}, true); // verify otp
 
 // Router::add("POST", "/auth/send-email", function () {
 // AuthController::sendEmail();
@@ -889,7 +889,7 @@ Router::add(
     "/api/get-login-histories",
     fn() =>
     LoginHistoriesController::getLoginHistories(),
-    false
+    true
 );
 
 Router::add(
@@ -932,4 +932,46 @@ Router::add(
     "/api/user/privacy/default",
     fn() => PrivacyController::updateDefault(),
     true
+);
+
+Router::add(
+    "GET",
+    "/api/user/security/2fa",
+    fn() => PrivacyController::get2fa(),
+    true
+);
+
+Router::add(
+    "POST",
+    "/api/user/security/2fa",
+    fn() => PrivacyController::update2fa(),
+    true
+);
+
+Router::add(
+    "GET",
+    "/api/user/account-health",
+    fn() => UserController::getAccountHealth(),
+    true
+);
+
+Router::add(
+    "GET",
+    "/api/user/login-activity",
+    fn() => AuthController::getLoginActivity(),
+    true
+);
+
+Router::add(
+    "GET",
+    "/api/user/get-devices",
+    fn() => AuthController::getLoggedInDevices(),
+    true
+);
+
+Router::add(
+    "POST",
+    "/api/user/logout-all",
+    fn() => AuthController::logoutAllDevices(),
+    true,
 );
