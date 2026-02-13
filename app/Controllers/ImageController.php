@@ -2,89 +2,66 @@
 namespace App\Controllers;
 
 use App\Core\Auth;
-use App\Core\JWT;
 use App\Core\Request;
 use App\Core\Response;
 use App\Core\Database;
-use App\Core\Generator;
-use App\Service\TokenService;
-use App\Service\PasswordService;
 use App\Service\ImageService;
-use DateTime;
 
 class ImageController
 {
     public static function uploadImage()
     {
         $conn = Database::connect();
-        $user_id = (int) (Request::input("user_id") ?? 0);
-        
+
+        $user = Auth::getUser();
+        $user_id = $user["user_id"];
+
+        $folder = Request::file("folder");
+
         if ($user_id <= 0) {
             Response::json([
                 "status" => false,
                 "message" => "Invalid user ID"
             ], 400);
-            return;
         }
 
-        // Check if file was uploaded
-        if (!isset($_FILES['image']) || $_FILES['image']['error'] !== UPLOAD_ERR_OK) {
+        if (!isset($_FILES['image'])) {
             Response::json([
                 "status" => false,
-                "message" => "No image uploaded or upload error"
+                "message" => "No image uploaded"
             ], 400);
-            return;
         }
 
-        $file = $_FILES['image'];
-        $fileType = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-        
-        // Validate file type
-        $allowedTypes = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-        if (!in_array($fileType, $allowedTypes)) {
-            Response::json([
-                "status" => false,
-                "message" => "Invalid file type. Allowed: " . implode(', ', $allowedTypes)
-            ], 400);
-            return;
-        }
+        try {
+            // 🔥 Delegate upload to service
+            $result = ImageService::uploadImage($_FILES['image'], $folder);
 
-        // Validate file size (max 5MB)
-        $maxSize = 5 * 1024 * 1024; // 5MB
-        if ($file['size'] > $maxSize) {
-            Response::json([
-                "status" => false,
-                "message" => "File too large. Max size is 5MB"
-            ], 400);
-            return;
-        }
+            // Save image URL in database
+            // $stmt = $conn->prepare("
+            //     UPDATE users 
+            //     SET profile_image = :profile_image 
+            //     WHERE user_id = :user_id
+            // ");
 
-        // Create uploads directory if it doesn't exist
-        $uploadDir = 'uploads/profile_images/';
-        if (!file_exists($uploadDir)) {
-            mkdir($uploadDir, 0777, true);
-        }
+            // $stmt->execute([
+            //     ":profile_image" => $result["secure_url"],
+            //     ":user_id" => $user_id
+            // ]);
 
-        // Generate unique filename
-        $uniqueName = uniqid('profile_', true) . '.' . $fileType;
-        $uploadPath = $uploadDir . $uniqueName;
-
-        // Move uploaded file
-        if (move_uploaded_file($file['tmp_name'], $uploadPath)) {
-            // Create URL for the image
-            $imageUrl = '/' . $uploadPath;
-            
             Response::json([
                 "status" => true,
-                "message" => "Image uploaded successfully",
+                "message" => "Profile image updated successfully",
                 "data" => [
-                    "image_url" => $imageUrl
+                    "image_url" => $result["secure_url"],
+                    "storage" => $result["storage"] ?? "cloud"
                 ]
             ], 200);
-        } else {
+
+        } catch (\Throwable $e) {
             Response::json([
                 "status" => false,
-                "message" => "Failed to upload image"
+                "message" => "Image upload failed",
+                "error" => $e->getMessage()
             ], 500);
         }
     }

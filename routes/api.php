@@ -47,6 +47,13 @@ Router::add(
 
 Router::add(
     "POST",
+    "/auth/logout",
+    fn() => AuthController::logout(),
+    true
+);
+
+Router::add(
+    "POST",
     "/auth/register",
     fn() =>
     AuthController::register(),
