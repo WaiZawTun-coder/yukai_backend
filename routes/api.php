@@ -1,5 +1,6 @@
 <?php
 
+use App\Controllers\AdminController;
 use App\Controllers\AuthController;
 use App\Controllers\DeviceController;
 use App\Controllers\FriendController;
@@ -13,7 +14,7 @@ use App\Controllers\ChatController;
 use App\Controllers\MessageController;
 use App\Controllers\ReportController;
 
-use App\Controllers\AdminController;
+
 use App\Controllers\LoginHistoriesController;
 use App\Controllers\ImageController;
 use App\Controllers\PrivacyController;
@@ -227,7 +228,7 @@ Router::add(
     "/api/create-post",
     fn() =>
     PostController::createPost(),
-    true
+    false
 );
 
 Router::add(
@@ -861,12 +862,36 @@ Router::add(
     fn() =>
     AdminController::forgetPassword(),
     false
-);
+ );
+ 
+ //Admin
+ 
 Router::add(
     "POST",
     "/api/reset_password",
     fn() =>
     AdminController::resetPassword(),
+    false
+);
+Router::add(
+    "POST",
+    "/api/ban_user",
+    fn()=>
+    AdminController::banUser(),
+    true
+);
+Router::add(
+    "POST",
+    "/api/ban_post",
+    fn() => 
+    AdminController::banPost(),
+    true
+);
+Router::add(
+    "POST",
+    "/api/edit_admin_profile",
+    fn() =>
+    AdminController::editAdminProfile(),
     false
 );
 

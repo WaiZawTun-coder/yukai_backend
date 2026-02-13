@@ -6,6 +6,8 @@ use App\Core\Database;
 use App\Core\Response;
 use App\Core\Request;
 use App\Service\ImageService;
+use App\Service\PasswordService;
+use App\Service\EmailService;
 
 class UserController
 {
@@ -176,6 +178,7 @@ class UserController
         $user_id = (int) (Request::input("user_id") ?? 0);
         $display_name = trim(Request::input("display_name") ?? "");
         $email = trim(Request::input("email") ?? "");
+        $password=trim(Request::input('password')?? "");
         $bio = trim(Request::input("bio") ?? "");
         // $profile_image = trim(Request::input("profile_image") ?? "");
         $profile_image = Request::file("profile_image");
@@ -212,9 +215,29 @@ class UserController
             $types .= "s";
         }
         if (!empty($email)) {
-            $updates[] = "email = ?";
-            $params[] = $email;
-            $types .= "s";
+           EmailService::validate($email);
+             if ($email !== $user['email']) {
+            // Check if new email already exists for another admin
+            $checkEmailSql = "SELECT admin_id FROM admin WHERE email = ? AND admin_id != ?";
+            $checkStmt = $conn->prepare($checkEmailSql);
+            $checkStmt->bind_param("si", $email, $admin_id);
+            $checkStmt->execute();
+            $emailResult = $checkStmt->get_result();
+            
+            if ($emailResult->num_rows > 0) {
+                Response::json([
+                    "status" => false,
+                    "message" => "Email already exists"
+                ]);
+                
+            }
+        }
+        if(!empty($password)){
+            PasswordService::isStrong($password);
+            $hashpwd=password_hash($password,PASSWORD_DEFAULT);
+            $updates[]="password = ?";
+            $params[]=$hashpwd;
+            $types .="s";
         }
         if (!empty($bio)) {
             $updates[] = "bio = ?";

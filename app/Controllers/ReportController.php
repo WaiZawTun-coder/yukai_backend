@@ -57,7 +57,7 @@ class ReportController{
         }
         
 
-        $reportPostInsertSql="INSERT INTO reported_post (reporter_user_id, post_id,reported_user_id,type, description)
+        $reportPostInsertSql="INSERT INTO reported_posts (reporter_user_id, post_id,reported_user_id,type, description)
                                 VALUES (?,?,?,?,?)";
         $reportPostInsert=$conn->prepare($reportPostInsertSql);
         $reportPostInsert->bind_param("iiiss",$reporter_user_id,$post_id,$creator_user_id,$type,$description);
