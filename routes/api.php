@@ -615,6 +615,13 @@ Router::add(
     true
 );
 
+Router::add(
+    "POST",
+    "/api/chats/mute",
+    fn() => ChatController::muteChat(),
+    true
+);
+
 
 /*
 |--------------------------------------------------------------------------

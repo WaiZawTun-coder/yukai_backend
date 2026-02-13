@@ -642,6 +642,7 @@ class ChatController
                u.profile_image,
                u.gender,
                cp.joined_at,
+               cp.is_muted,
                d.device_id,
                d.identity_key_pub,
                d.signed_prekey_pub,
@@ -672,7 +673,8 @@ class ChatController
                     "profile_image" => $row["profile_image"],
                     "joined_at" => $row["joined_at"],
                     "gender" => $row["gender"],
-                    "devices" => []
+                    "devices" => [],
+                    "is_muted" => $row["is_muted"]
                 ];
             }
 
@@ -740,5 +742,34 @@ class ChatController
         $stmt->execute();
 
         Response::json(["status" => true]);
+    }
+
+    public static function muteChat()
+    {
+        $conn = Database::connect();
+        $user = Auth::getUser();
+        $me = $user["user_id"];
+
+        $is_muted = Request::input("is_muted") ?? 0;
+        $chat_id = Request::input("chat_id") ?? 0;
+
+        if (!$chat_id) {
+            Response::json(["status" => false, "message" => "Invalid chat id"]);
+        }
+
+        $sql = "UPDATE chat_participants SET is_muted = ? WHERE chat_id = ? AND user_id = ?";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("iii", $is_muted, $chat_id, $me);
+
+        $stmt->execute();
+
+        $status = $stmt->get_result();
+
+        Response::json([
+            "status" => true,
+            "message" => "Muted"
+        ]);
+
     }
 }
