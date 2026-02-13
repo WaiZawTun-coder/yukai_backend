@@ -727,13 +727,28 @@ class AdminController
     {
 
         $conn = Database::connect();
+        // $current_admin=AdminAuth::admin();
+        //  if (!$current_admin) {
+        //      Response::json([
+        //      "status"=>false,
+        //      "message"=>"unauthorized"
+        //     ], 401);
+        //     return; 
+        //   }
+
         $admin_id = (int) (Request::input("admin_id") ?? 0);
         $display_name = trim(Request::input("display_name") ?? "");
         $email = trim(Request::input("email") ?? "");
         $profile_image = trim(Request::input("profile_image") ?? "");
+        $password  =trim(Request::input('password')?? "");
+        //Authorization::Only admins can only edit their own profile
+        // if($current_admin['admin_id']!==$admin_id){
+        //     Response::json([
+        //         "status"=>false,
+        //         "message"=>"You can only edit your own profile"
+        //     ]);
+        // }
        
-
-
         // Check admin exists
         $sql = "SELECT * FROM admin WHERE admin_id = ?";
         $stmt = $conn->prepare($sql);
@@ -748,7 +763,7 @@ class AdminController
             ], 404);
             return;
         }
-        if($result)
+      
 
         $admin = $result->fetch_assoc();
         $updates = $updates ?? [];
@@ -761,14 +776,56 @@ class AdminController
 
 
         if (!empty($display_name)) {
+            $current_display_name = trim($admin['display_name'] ?? '');
+        
+        if (strtolower($display_name) !== strtolower($current_display_name)) {
+            // Display name is changing, check if new one already exists
+            $checkDisplayNameSql = "SELECT admin_id FROM admin WHERE LOWER(display_name) = ? AND admin_id != ?";
+            $checkStmt = $conn->prepare($checkDisplayNameSql);
+            $normalized_display_name = strtolower($display_name);
+            $checkStmt->bind_param("si", $normalized_display_name, $admin_id);
+            $checkStmt->execute();
+            
+            if ($checkStmt->get_result()->num_rows > 0) {
+                Response::json([
+                    "status" => false,
+                    "message" => "Display name already exists"
+                ], 400);
+                return;
+            }
+        }
             $updates[] = "display_name = ?";
             $params[] = $display_name;
             $types .= "s";
         }
         if (!empty($email)) {
+            EmailService::validate($email);
+             if ($email !== $admin['email']) {
+            // Check if new email already exists for another admin
+            $checkEmailSql = "SELECT admin_id FROM admin WHERE email = ? AND admin_id != ?";
+            $checkStmt = $conn->prepare($checkEmailSql);
+            $checkStmt->bind_param("si", $email, $admin_id);
+            $checkStmt->execute();
+            $emailResult = $checkStmt->get_result();
+            
+            if ($emailResult->num_rows > 0) {
+                Response::json([
+                    "status" => false,
+                    "message" => "Email already exists"
+                ], 400);
+                
+            }
+        }
             $updates[] = "email = ?";
             $params[] = $email;
             $types .= "s";
+        }
+        if(!empty($password)){
+            PasswordService::isStrong($password);
+            $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+            $updates[]="password = ?";
+            $params[]=$hashedPassword;
+            $types .="s";
         }
         
         if (!empty($profile_image)) {
@@ -776,6 +833,7 @@ class AdminController
             $params[] = $profile_image;
             $types .= "s";
         }
+        
        
 
 
@@ -787,6 +845,7 @@ class AdminController
             ], 400);
             return;
         }
+       
 
 
         $params[] = $admin_id;
