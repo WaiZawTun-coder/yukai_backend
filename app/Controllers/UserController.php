@@ -178,7 +178,7 @@ class UserController
         $user_id = (int) (Request::input("user_id") ?? 0);
         $display_name = trim(Request::input("display_name") ?? "");
         $email = trim(Request::input("email") ?? "");
-        $password=trim(Request::input('password')?? "");
+        $password = trim(Request::input('password') ?? "");
         $bio = trim(Request::input("bio") ?? "");
         // $profile_image = trim(Request::input("profile_image") ?? "");
         $profile_image = Request::file("profile_image");
@@ -215,103 +215,104 @@ class UserController
             $types .= "s";
         }
         if (!empty($email)) {
-           EmailService::validate($email);
-             if ($email !== $user['email']) {
-            // Check if new email already exists for another admin
-            $checkEmailSql = "SELECT admin_id FROM admin WHERE email = ? AND admin_id != ?";
-            $checkStmt = $conn->prepare($checkEmailSql);
-            $checkStmt->bind_param("si", $email, $admin_id);
-            $checkStmt->execute();
-            $emailResult = $checkStmt->get_result();
-            
-            if ($emailResult->num_rows > 0) {
-                Response::json([
-                    "status" => false,
-                    "message" => "Email already exists"
-                ]);
-                
+            EmailService::validate($email);
+            if ($email !== $user['email']) {
+                // Check if new email already exists for another admin
+                $checkEmailSql = "SELECT admin_id FROM admin WHERE email = ? AND admin_id != ?";
+                $checkStmt = $conn->prepare($checkEmailSql);
+                $checkStmt->bind_param("si", $email, $admin_id);
+                $checkStmt->execute();
+                $emailResult = $checkStmt->get_result();
+
+                if ($emailResult->num_rows > 0) {
+                    Response::json([
+                        "status" => false,
+                        "message" => "Email already exists"
+                    ]);
+
+                }
             }
-        }
-        if(!empty($password)){
-            PasswordService::isStrong($password);
-            $hashpwd=password_hash($password,PASSWORD_DEFAULT);
-            $updates[]="password = ?";
-            $params[]=$hashpwd;
-            $types .="s";
-        }
-        if (!empty($bio)) {
-            $updates[] = "bio = ?";
-            $params[] = $bio;
-            $types .= "s";
-        }
-        if (!empty($profile_image)) {
-            $profileImageUResult = ImageService::uploadImage($profile_image);
-            $profileImageUrl = $profileImageUResult["secure_url"] ?? "";
-            if ($profileImageUrl == "") {
+            if (!empty($password)) {
+                PasswordService::isStrong($password);
+                $hashpwd = password_hash($password, PASSWORD_DEFAULT);
+                $updates[] = "password = ?";
+                $params[] = $hashpwd;
+                $types .= "s";
+            }
+            if (!empty($bio)) {
+                $updates[] = "bio = ?";
+                $params[] = $bio;
+                $types .= "s";
+            }
+            if (!empty($profile_image)) {
+                $profileImageUResult = ImageService::uploadImage($profile_image);
+                $profileImageUrl = $profileImageUResult["secure_url"] ?? "";
+                if ($profileImageUrl == "") {
+                    Response::json([
+                        "status" => false,
+                        "message" => "Failed to upload profile image"
+                    ], 500);
+                    return;
+                }
+                $updates[] = "profile_image = ?";
+                $params[] = $profileImageUrl;
+                $types .= "s";
+            }
+            if (!empty($cover_image)) {
+                $coverImageResult = ImageService::uploadImage($cover_image);
+                $coverImageUrl = $coverImageResult["secure_url"] ?? "";
+                if ($coverImageUrl == "") {
+                    Response::json([
+                        "status" => false,
+                        "message" => "Failed to upload cover image"
+                    ], 500);
+                    return;
+                }
+                $updates[] = "cover_image = ?";
+                $params[] = $coverImageUrl;
+                $types .= "s";
+            }
+            if (!empty($phone_number)) {
+                $updates[] = "phone_number = ?";
+                $params[] = $phone_number;
+                $types .= "s";
+            }
+
+            // Nothing to update
+            if (empty($updates)) {
                 Response::json([
                     "status" => false,
-                    "message" => "Failed to upload profile image"
-                ], 500);
+                    "message" => "No fields to update"
+                ], 400);
                 return;
             }
-            $updates[] = "profile_image = ?";
-            $params[] = $profileImageUrl;
-            $types .= "s";
-        }
-        if (!empty($cover_image)) {
-            $coverImageResult = ImageService::uploadImage($cover_image);
-            $coverImageUrl = $coverImageResult["secure_url"] ?? "";
-            if ($coverImageUrl == "") {
-                Response::json([
-                    "status" => false,
-                    "message" => "Failed to upload cover image"
-                ], 500);
-                return;
-            }
-            $updates[] = "cover_image = ?";
-            $params[] = $coverImageUrl;
-            $types .= "s";
-        }
-        if (!empty($phone_number)) {
-            $updates[] = "phone_number = ?";
-            $params[] = $phone_number;
-            $types .= "s";
-        }
 
-        // Nothing to update
-        if (empty($updates)) {
-            Response::json([
-                "status" => false,
-                "message" => "No fields to update"
-            ], 400);
-            return;
-        }
+            $params[] = $user_id;
+            $types .= "i";
 
-        $params[] = $user_id;
-        $types .= "i";
+            $sql = "UPDATE users SET " . implode(" ,", $updates) . " WHERE user_id=?";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param($types, ...$params);
 
-        $sql = "UPDATE users SET " . implode(" ,", $updates) . " WHERE user_id=?";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param($types, ...$params);
-
-        if ($stmt->execute()) {
-            if ($stmt->affected_rows > 0) {
-                Response::json([
-                    "status" => true,
-                    "message" => "User updated successfully"
-                ], 200);
+            if ($stmt->execute()) {
+                if ($stmt->affected_rows > 0) {
+                    Response::json([
+                        "status" => true,
+                        "message" => "User updated successfully"
+                    ], 200);
+                } else {
+                    Response::json([
+                        "status" => false,
+                        "message" => "No changes were made"
+                    ], 200);
+                }
             } else {
+                // THIS WAS MISSING! Handle execute() failure
                 Response::json([
                     "status" => false,
-                    "message" => "No changes were made"
-                ], 200);
+                    "message" => "Database error: " . $stmt->error
+                ], 500);
             }
-        } else {
-            // THIS WAS MISSING! Handle execute() failure
-            Response::json([
-                "status" => false,
-                "message" => "Database error: " . $stmt->error
-            ], 500);
         }
     }
     //request Password OTP

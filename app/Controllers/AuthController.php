@@ -1,37 +1,37 @@
 <?php
-    namespace App\Controllers;
+namespace App\Controllers;
 
-    use App\Core\Auth;
-    use App\Core\JWT;
-    use App\Core\Request;
-    use App\Core\Response;
-    use App\Core\Database;
-    use App\Core\Generator;
-    use App\Service\TokenService;
-    use App\Service\PasswordService;
-    use App\Service\ImageService;
-    use App\Service\EmailService;
-    use DateTime;
-    use PHPMailer\PHPMailer\PHPMailer;
-    use PHPMailer\PHPMailer\Exception;
+use App\Core\Auth;
+use App\Core\JWT;
+use App\Core\Request;
+use App\Core\Response;
+use App\Core\Database;
+use App\Core\Generator;
+use App\Service\TokenService;
+use App\Service\PasswordService;
+use App\Service\ImageService;
+use App\Service\EmailService;
+use DateTime;
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 
-    require_once __DIR__ . '/../../phpmailer/Exception.php';
-    require_once __DIR__ . '/../../phpmailer/PHPMailer.php';
-    require_once __DIR__ . '/../../phpmailer/SMTP.php';
+require_once __DIR__ . '/../../phpmailer/Exception.php';
+require_once __DIR__ . '/../../phpmailer/PHPMailer.php';
+require_once __DIR__ . '/../../phpmailer/SMTP.php';
 
-    class AuthController
+class AuthController
+{
+    public static function index()
     {
-        public static function index()
-        {
-            $conn = Database::connect();
-            $user = Auth::getUser();
-            $user_id = $user["user_id"];
+        $conn = Database::connect();
+        $user = Auth::getUser();
+        $user_id = $user["user_id"];
 
-            if ($user_id == null)
-                Response::json([
-                    "status" => false,
-                    "message" => "Invalid user id"
-                ], 404);
+        if ($user_id == null)
+            Response::json([
+                "status" => false,
+                "message" => "Invalid user id"
+            ], 404);
 
         $userSql = "
             SELECT user_id, username, display_name, gender, email,
@@ -41,128 +41,127 @@
             WHERE user_id = ?
         ";
 
-            $stmt = $conn->prepare($userSql);
-            $stmt->bind_param("i", $user_id);
-            $stmt->execute();
-            $result = $stmt->get_result();
+        $stmt = $conn->prepare($userSql);
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
 
-            if ($result->num_rows === 0) {
-                Response::json([
-                    "status" => false,
-                    "message" => "User not found"
-                ], 404);
-
-            }
-
-            $user = $result->fetch_assoc();
-
+        if ($result->num_rows === 0) {
             Response::json([
-                "status" => true,
-                "data" => $user
-            ]);
+                "status" => false,
+                "message" => "User not found"
+            ], 404);
+
         }
 
-        public static function login()
-        {
-            $conn = Database::connect();
-            $input = Request::json();
+        $user = $result->fetch_assoc();
+
+        Response::json([
+            "status" => true,
+            "data" => $user
+        ]);
+    }
+
+    public static function login()
+    {
+        $conn = Database::connect();
+        $input = Request::json();
 
         $username = trim($input['username'] ?? '');
         $password = trim($input['password'] ?? '');
         $device_id = (int) (Request::input("device_id") ?? 0);
 
-            if ($username === '' && $email==='' || $password === '') {
-                Response::json(["status" => false, "message" => "Username and Password required"], 400);
-                return;
-            }
-            EmailService::validate($email);
-            $stmt = $conn->prepare("SELECT * FROM users WHERE email = ? OR username = ? LIMIT 1");
-            $stmt->bind_param("ss", $username, $username);
+        if ($username === '' || $password === '') {
+            Response::json(["status" => false, "message" => "Username and Password required"], 400);
+            return;
+        }
+        $stmt = $conn->prepare("SELECT * FROM users WHERE email = ? OR username = ? LIMIT 1");
+        $stmt->bind_param("ss", $username, $username);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        if ($result->num_rows === 0) {
+            Response::json(["status" => false, "message" => "Account not found"], 404);
+            return;
+        }
+
+        $user = $result->fetch_assoc();
+
+        if ((int) $user['is_active'] === 0) {
+            Response::json(["status" => false, "message" => "Account is not active"], 403);
+            return;
+        }
+
+        if (in_array(trim($user['status']), ['suspend_user', 'ban_user'])) {
+            Response::json([
+                "status" => false,
+                "message" => "The user account is " . str_replace('_', ' ', $user['status'])
+            ], 403);
+            return;
+        }
+
+        if (!PasswordService::verify($password, $user['password'])) {
+            Response::json(["status" => false, "message" => "Incorrect password"], 401);
+            return;
+        }
+
+        // Reactivate account if deactivated
+        if ((int) $user['deactivate'] === 1) {
+            $stmt = $conn->prepare("UPDATE users SET deactivate = 0 WHERE user_id = ?");
+            $stmt->bind_param("i", $user['user_id']);
             $stmt->execute();
-            $result = $stmt->get_result();
+            $user['deactivate'] = 0;
+        }
 
-            if ($result->num_rows === 0) {
-                Response::json(["status" => false, "message" => "Account not found"], 404);
+        /**
+         * =====================
+         * 🔐 TWO FACTOR AUTH
+         * =====================
+         */
+        if ((int) $user['is_2fa'] === 1) {
+
+            $otpCode = self::generateOTP($user['user_id']);
+            if (!$otpCode) {
+                Response::json(["status" => false, "message" => "Failed to generate OTP"]);
                 return;
             }
 
-            $user = $result->fetch_assoc();
+            self::sendEmail($user['email'], $otpCode);
 
-            if ((int) $user['is_active'] === 0) {
-                Response::json(["status" => false, "message" => "Account is not active"], 403);
-                return;
-            }
-
-            if (in_array(trim($user['status']), ['suspend_user', 'ban_user'])) {
-                Response::json([
-                    "status" => false,
-                    "message" => "The user account is " . str_replace('_', ' ', $user['status'])
-                ], 403);
-                return;
-            }
-
-            if (!PasswordService::verify($password, $user['password'])) {
-                Response::json(["status" => false, "message" => "Incorrect password"], 401);
-                return;
-            }
-
-            // Reactivate account if deactivated
-            if ((int) $user['deactivate'] === 1) {
-                $stmt = $conn->prepare("UPDATE users SET deactivate = 0 WHERE user_id = ?");
-                $stmt->bind_param("i", $user['user_id']);
-                $stmt->execute();
-                $user['deactivate'] = 0;
-            }
-
-            /**
-             * =====================
-             * 🔐 TWO FACTOR AUTH
-             * =====================
-             */
-            if ((int) $user['is_2fa'] === 1) {
-
-                $otpCode = self::generateOTP($user['user_id']);
-                if (!$otpCode) {
-                    Response::json(["status" => false, "message" => "Failed to generate OTP"]);
-                    return;
-                }
-
-                self::sendEmail($user['email'], $otpCode);
-
-                $accessToken = TokenService::generateAccessToken([
-                    "user_id" => $user['user_id'],
-                    "username" => $user['username'],
-                    "two_factor_verified" => false
-                ], 300);
-
-                Response::json([
-                    "status" => true,
-                    "two_factor_required" => true,
-                    "message" => "OTP sent to your email",
-                    "data" => [
-                        "user_id" => $user['user_id'],
-                        "access_token" => $accessToken
-                    ]
-                ]);
-                return;
-            }
-
-            /**
-             * =====================
-             * 🔑 NORMAL LOGIN
-             * =====================
-             */
             $accessToken = TokenService::generateAccessToken([
                 "user_id" => $user['user_id'],
                 "username" => $user['username'],
-                "two_factor_verified" => true
+                "two_factor_verified" => false
+            ], 300);
+
+            Response::json([
+                "status" => true,
+                "two_factor_required" => true,
+                "message" => "OTP sent to your email",
+                "data" => [
+                    "user_id" => $user['user_id'],
+                    "access_token" => $accessToken
+                ]
             ]);
+            return;
+        }
 
-            $refreshPayload = TokenService::generateRefreshToken();
-            $refreshToken = $refreshPayload["token"];
-            $refreshHash = $refreshPayload["hash"];
+        /**
+         * =====================
+         * 🔑 NORMAL LOGIN
+         * =====================
+         */
+        $accessToken = TokenService::generateAccessToken([
+            "user_id" => $user['user_id'],
+            "username" => $user['username'],
+            "two_factor_verified" => true
+        ]);
 
-            $expireAt = date("Y-m-d H:i:s", time() + 60 * 60 * 24 * 7);
+        $refreshPayload = TokenService::generateRefreshToken();
+        $refreshToken = $refreshPayload["token"];
+        $refreshHash = $refreshPayload["hash"];
+
+        $expireAt = date("Y-m-d H:i:s", time() + 60 * 60 * 24 * 7);
 
         // Save hashed refresh token to refresh_tokens table
         $stmt = $conn->prepare("
@@ -182,22 +181,22 @@
             "samesite" => $isSecure ? "None" : "Lax"
         ]);
 
-            // Incomplete registration
-            if ((int) $user['completed_step'] < 2) {
-                Response::json([
-                    "status" => true,
-                    "incomplete" => true,
-                    "message" => "Registration not completed",
-                    "data" => [
-                        "user_id" => $user['user_id'],
-                        "username" => $user['username'],
-                        "email" => $user['email'],
-                        "completed_step" => $user['completed_step'],
-                        "access_token" => $accessToken
-                    ]
-                ]);
-                return;
-            }
+        // Incomplete registration
+        if ((int) $user['completed_step'] < 2) {
+            Response::json([
+                "status" => true,
+                "incomplete" => true,
+                "message" => "Registration not completed",
+                "data" => [
+                    "user_id" => $user['user_id'],
+                    "username" => $user['username'],
+                    "email" => $user['email'],
+                    "completed_step" => $user['completed_step'],
+                    "access_token" => $accessToken
+                ]
+            ]);
+            return;
+        }
 
         if ($device_id) {
 
@@ -232,203 +231,203 @@
             }
         }
 
-            Response::json([
-                "status" => true,
-                "message" => "Login successful",
-                "data" => [
-                    "user_id" => $user["user_id"],
-                    "username" => $user["username"],
-                    "email" => $user["email"],
-                    "display_name" => $user["display_name"],
-                    "gender" => $user["gender"],
-                    "phone_number" => $user["phone_number"],
-                    "profile_image" => $user["profile_image"],
-                    "cover_image" => $user["cover_image"],
-                    "birthday" => $user["birthday"],
-                    "location" => $user["location"],
-                    "is_active" => $user["is_active"],
-                    "last_seen" => $user["last_seen"],
-                    "access_token" => $accessToken,
-                    "completed_step" => $user["completed_step"]
-                ]
-            ]);
-        }
+        Response::json([
+            "status" => true,
+            "message" => "Login successful",
+            "data" => [
+                "user_id" => $user["user_id"],
+                "username" => $user["username"],
+                "email" => $user["email"],
+                "display_name" => $user["display_name"],
+                "gender" => $user["gender"],
+                "phone_number" => $user["phone_number"],
+                "profile_image" => $user["profile_image"],
+                "cover_image" => $user["cover_image"],
+                "birthday" => $user["birthday"],
+                "location" => $user["location"],
+                "is_active" => $user["is_active"],
+                "last_seen" => $user["last_seen"],
+                "access_token" => $accessToken,
+                "completed_step" => $user["completed_step"]
+            ]
+        ]);
+    }
 
 
-        // need to add protect in step 2
-        public static function register($username = "")
-        {
-            $conn = Database::connect();
-            $input = Request::json();
-            $step = 1;
+    // need to add protect in step 2
+    public static function register($username = "")
+    {
+        $conn = Database::connect();
+        $input = Request::json();
+        $step = 1;
 
-            if ($username !== "") {
-                $stmt = $conn->prepare("SELECT completed_step FROM users WHERE username = ?");
-                $stmt->bind_param("s", $username);
-                $stmt->execute();
-                $res = $stmt->get_result();
+        if ($username !== "") {
+            $stmt = $conn->prepare("SELECT completed_step FROM users WHERE username = ?");
+            $stmt->bind_param("s", $username);
+            $stmt->execute();
+            $res = $stmt->get_result();
 
-                if ($res->num_rows === 0) {
-                    Response::json(["status" => false, "message" => "User not found"], 404);
-                }
-
-                $step = ((int) $res->fetch_assoc()['completed_step']) + 1;
+            if ($res->num_rows === 0) {
+                Response::json(["status" => false, "message" => "User not found"], 404);
             }
 
-            switch ($step) {
-                case 1:
-                    $username = trim($input["username"] ?? "");
-                    $password = trim($input["password"] ?? "");
-                    $email = trim($input["email"] ?? "");
+            $step = ((int) $res->fetch_assoc()['completed_step']) + 1;
+        }
 
-                    if ($username === "" || $password === "" || $email === "") {
-                        Response::json(["status" => false, "message" => "All fields required"], 400);
-                    }
-                    EmailService::validate($email);
-                    $stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ?");
-                    $stmt->bind_param("s", $email);
-                    $stmt->execute();
+        switch ($step) {
+            case 1:
+                $username = trim($input["username"] ?? "");
+                $password = trim($input["password"] ?? "");
+                $email = trim($input["email"] ?? "");
 
-                    if ($stmt->get_result()->num_rows > 0) {
-                        Response::json(["status" => false, "message" => "Email already registered"], 409);
-                    }
-                    
+                if ($username === "" || $password === "" || $email === "") {
+                    Response::json(["status" => false, "message" => "All fields required"], 400);
+                }
+                EmailService::validate($email);
+                $stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ?");
+                $stmt->bind_param("s", $email);
+                $stmt->execute();
 
-                    $generatedUsername = Generator::generateUsername($username);
-                    //test strong password
-                    PasswordService::isStrong($password);
-                    $hash = PasswordService::hash($password);
-                    $stmt = $conn->prepare("INSERT INTO users (username, display_name, password, email, completed_step) VALUES (?, ?, ?, ?, 1)");
-                    $stmt->bind_param("ssss", $generatedUsername, $username, $hash, $email);
-                    $stmt->execute();
+                if ($stmt->get_result()->num_rows > 0) {
+                    Response::json(["status" => false, "message" => "Email already registered"], 409);
+                }
 
-                    $userId = $conn->insert_id;
 
-                    $accessToken = TokenService::generateAccessToken(
-                        [
-                            "user_id" => $userId,
-                            "username" => $generatedUsername,
-                            "scope" => "registration"
-                        ],
-                        600
-                    );
+                $generatedUsername = Generator::generateUsername($username);
+                //test strong password
+                PasswordService::isStrong($password);
+                $hash = PasswordService::hash($password);
+                $stmt = $conn->prepare("INSERT INTO users (username, display_name, password, email, completed_step) VALUES (?, ?, ?, ?, 1)");
+                $stmt->bind_param("ssss", $generatedUsername, $username, $hash, $email);
+                $stmt->execute();
 
+                $userId = $conn->insert_id;
+
+                $accessToken = TokenService::generateAccessToken(
+                    [
+                        "user_id" => $userId,
+                        "username" => $generatedUsername,
+                        "scope" => "registration"
+                    ],
+                    600
+                );
+
+                Response::json([
+                    "status" => true,
+                    "step" => 2,
+                    "data" => [
+                        "userId" => $userId,
+                        "email" => $email,
+                        "generated_username" => $generatedUsername,
+                        "access_token" => $accessToken
+                    ]
+                ]);
+                break;
+            case 2:
+                $userId = (int) trim(Request::input("userId") ?? 0);
+                $bodyUsername = trim(Request::input("username") ?? "");
+                $dateOfBirth = trim(Request::input("dateOfBirth") ?? "");
+                $gender = trim(Request::input("gender") ?? "");
+                $phoneNumber = trim(Request::input("phoneNumber") ?? "");
+                $email = trim(Request::input("email") ?? "");
+                $profileImage = Request::file("profileImage");
+
+                //
+                $headers = getallheaders();
+                $authHeader = $headers["Authorization"] ?? $headers["authorization"] ?? null;
+                if (!preg_match('/Bearer\s(\S+)/', $authHeader, $matches)) {
                     Response::json([
-                        "status" => true,
-                        "step" => 2,
-                        "data" => [
-                            "userId" => $userId,
-                            "email" => $email,
-                            "generated_username" => $generatedUsername,
-                            "access_token" => $accessToken
-                        ]
-                    ]);
-                    break;
-                case 2:
-                    $userId = (int) trim(Request::input("userId") ?? 0);
-                    $bodyUsername = trim(Request::input("username") ?? "");
-                    $dateOfBirth = trim(Request::input("dateOfBirth") ?? "");
-                    $gender = trim(Request::input("gender") ?? "");
-                    $phoneNumber = trim(Request::input("phoneNumber") ?? "");
-                    $email = trim(Request::input("email") ?? "");
-                    $profileImage = Request::file("profileImage");
+                        "status" => false,
+                        "message" => "Unauthorized"
+                    ], 401);
+                }
+                $token = $matches[1];
+                try {
+                    $payload = JWT::decode($token, $_ENV["JWT_SECRET"]);
+                } catch (\Exception $e) {
+                    Response::json([
+                        "status" => false,
+                        "message" => "Invalid or expired token"
+                    ], 401);
+                }
 
-                    //
-                    $headers = getallheaders();
-                    $authHeader = $headers["Authorization"] ?? $headers["authorization"] ?? null;
-                    if (!preg_match('/Bearer\s(\S+)/', $authHeader, $matches)) {
+                if (($payload["scope"] ?? null) !== "registration") {
+                    Response::json([
+                        "status" => false,
+                        "message" => "Invalid token scope"
+                    ], 403);
+                }
+
+                if ($payload["user_id"] != $userId) {
+                    Response::json([
+                        "status" => false,
+                        "message" => "Token mismatch"
+                    ], 401);
+                }
+
+                if ($profileImage != null && $profileImage["error"] !== UPLOAD_ERR_OK) {
+                    Response::json([
+                        "status" => false,
+                        "message" => "Upload Failed"
+                    ], 400);
+                }
+
+                // Required fields
+                if ($bodyUsername === "") {
+                    Response::json(["status" => false, "message" => "Username Required"], 400);
+                }
+
+                if ($dateOfBirth === "") {
+                    Response::json(["status" => false, "message" => "Date of birth Required"], 400);
+                }
+
+                if ($gender === "") {
+                    Response::json(["status" => false, "message" => "Gender Required"], 400);
+                }
+
+                // Validate date format
+                $birthday = DateTime::createFromFormat("Y-m-d", $dateOfBirth);
+                $errors = DateTime::getLastErrors();
+
+                if (!$birthday) {
+                    Response::json(["status" => false, "message" => "Invalid date format"], 400);
+                }
+
+                // Prevent future dates
+                $today = new DateTime("today");
+                if ($birthday > $today) {
+                    Response::json(["status" => false, "message" => "Date of birth cannot be in the future"], 400);
+                }
+
+                // Age check (13+)
+                $age = $birthday->diff($today)->y;
+                if ($age < 13) {
+                    Response::json(["status" => false, "message" => "You must be at least 13 years old"], 400);
+                }
+
+                // Username availability (only if changed)
+                if ($username !== $bodyUsername) {
+                    $checkSql = "SELECT user_id FROM users WHERE username = ? LIMIT 1";
+                    $checkStmt = $conn->prepare($checkSql);
+                    $checkStmt->bind_param("s", $bodyUsername);
+                    $checkStmt->execute();
+                    $checkResult = $checkStmt->get_result();
+
+                    if ($checkResult->num_rows > 0) {
                         Response::json([
                             "status" => false,
-                            "message" => "Unauthorized"
-                        ], 401);
+                            "message" => "$bodyUsername is not available"
+                        ], 409);
                     }
-                    $token = $matches[1];
-                    try {
-                        $payload = JWT::decode($token, $_ENV["JWT_SECRET"]);
-                    } catch (\Exception $e) {
-                        Response::json([
-                            "status" => false,
-                            "message" => "Invalid or expired token"
-                        ], 401);
-                    }
+                }
 
-                    if (($payload["scope"] ?? null) !== "registration") {
-                        Response::json([
-                            "status" => false,
-                            "message" => "Invalid token scope"
-                        ], 403);
-                    }
+                if ($profileImage != null) {
+                    $uploadImageResult = ImageService::uploadImage($profileImage);
+                }
+                $imageUrl = $uploadImageResult["secure_url"] ?? "";
 
-                    if ($payload["user_id"] != $userId) {
-                        Response::json([
-                            "status" => false,
-                            "message" => "Token mismatch"
-                        ], 401);
-                    }
-
-                    if ($profileImage != null && $profileImage["error"] !== UPLOAD_ERR_OK) {
-                        Response::json([
-                            "status" => false,
-                            "message" => "Upload Failed"
-                        ], 400);
-                    }
-
-                    // Required fields
-                    if ($bodyUsername === "") {
-                        Response::json(["status" => false, "message" => "Username Required"], 400);
-                    }
-
-                    if ($dateOfBirth === "") {
-                        Response::json(["status" => false, "message" => "Date of birth Required"], 400);
-                    }
-
-                    if ($gender === "") {
-                        Response::json(["status" => false, "message" => "Gender Required"], 400);
-                    }
-
-                    // Validate date format
-                    $birthday = DateTime::createFromFormat("Y-m-d", $dateOfBirth);
-                    $errors = DateTime::getLastErrors();
-
-                    if (!$birthday) {
-                        Response::json(["status" => false, "message" => "Invalid date format"], 400);
-                    }
-
-                    // Prevent future dates
-                    $today = new DateTime("today");
-                    if ($birthday > $today) {
-                        Response::json(["status" => false, "message" => "Date of birth cannot be in the future"], 400);
-                    }
-
-                    // Age check (13+)
-                    $age = $birthday->diff($today)->y;
-                    if ($age < 13) {
-                        Response::json(["status" => false, "message" => "You must be at least 13 years old"], 400);
-                    }
-
-                    // Username availability (only if changed)
-                    if ($username !== $bodyUsername) {
-                        $checkSql = "SELECT user_id FROM users WHERE username = ? LIMIT 1";
-                        $checkStmt = $conn->prepare($checkSql);
-                        $checkStmt->bind_param("s", $bodyUsername);
-                        $checkStmt->execute();
-                        $checkResult = $checkStmt->get_result();
-
-                        if ($checkResult->num_rows > 0) {
-                            Response::json([
-                                "status" => false,
-                                "message" => "$bodyUsername is not available"
-                            ], 409);
-                        }
-                    }
-
-                    if ($profileImage != null) {
-                        $uploadImageResult = ImageService::uploadImage($profileImage);
-                    }
-                    $imageUrl = $uploadImageResult["secure_url"] ?? "";
-
-                    // Update user
-                    $updateSql = "
+                // Update user
+                $updateSql = "
                             UPDATE users 
                             SET 
                                 username = ?, 
@@ -440,63 +439,63 @@
                             WHERE username = ? AND email = ?
                         ";
 
-                    $birthdaySql = $birthday->format("Y-m-d");
+                $birthdaySql = $birthday->format("Y-m-d");
 
-                    $updateStmt = $conn->prepare($updateSql);
-                    $updateStmt->bind_param(
-                        "sssssss",
-                        $bodyUsername,
-                        $birthdaySql,
-                        $gender,
-                        $phoneNumber,
-                        $imageUrl,
-                        $username,
-                        $email
-                    );
+                $updateStmt = $conn->prepare($updateSql);
+                $updateStmt->bind_param(
+                    "sssssss",
+                    $bodyUsername,
+                    $birthdaySql,
+                    $gender,
+                    $phoneNumber,
+                    $imageUrl,
+                    $username,
+                    $email
+                );
 
-                    $updateStmt->execute();
+                $updateStmt->execute();
 
-                    if ($updateStmt->affected_rows == 0) {
-                        Response::json([
-                            "status" => false,
-                            "message" => "Registration failed - step 2"
-                        ], 500);
-                    }
-
-                    Response::json([
-                        "status" => true,
-                        "message" => "Step 2 completed successfully"
-                    ]);
-                    break;
-                default:
+                if ($updateStmt->affected_rows == 0) {
                     Response::json([
                         "status" => false,
-                        "message" => "Invalid Registratino Step"
-                    ]);
-                    break;
-            }
+                        "message" => "Registration failed - step 2"
+                    ], 500);
+                }
+
+                Response::json([
+                    "status" => true,
+                    "message" => "Step 2 completed successfully"
+                ]);
+                break;
+            default:
+                Response::json([
+                    "status" => false,
+                    "message" => "Invalid Registratino Step"
+                ]);
+                break;
         }
+    }
 
-        public static function refresh()
-        {
-            $conn = Database::connect();
+    public static function refresh()
+    {
+        $conn = Database::connect();
 
-            $isSecure =
-                (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-                || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
+        $isSecure =
+            (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
 
         $refreshToken = $_COOKIE["refresh_token"] ?? null;
         $device_id = Request::input("device_id") ?? "";
 
-            if (!$refreshToken) {
-                Response::json([
-                    "status" => false,
-                    "message" => "Refresh token missing"
-                ], 401);
-                return;
-            }
+        if (!$refreshToken) {
+            Response::json([
+                "status" => false,
+                "message" => "Refresh token missing"
+            ], 401);
+            return;
+        }
 
-            $refreshHash = hash("sha256", $refreshToken);
+        $refreshHash = hash("sha256", $refreshToken);
 
         // Lookup in refresh_tokens table
         $stmt = $conn->prepare("
@@ -520,12 +519,12 @@
                 "samesite" => $isSecure ? "None" : "Lax"
             ]);
 
-                Response::json([
-                    "status" => false,
-                    "message" => "Invalid refresh token"
-                ], 401);
-                return;
-            }
+            Response::json([
+                "status" => false,
+                "message" => "Invalid refresh token"
+            ], 401);
+            return;
+        }
 
         $tokenData = $result->fetch_assoc();
 
@@ -536,20 +535,20 @@
             $stmt->bind_param("i", $tokenData["id"]);
             $stmt->execute();
 
-                setcookie("refresh_token", "", [
-                    "expires" => time() - 3600,
-                    "path" => "/",
-                    "secure" => $isSecure,
-                    "httponly" => true,
-                    "samesite" => $isSecure ? "None" : "Lax"
-                ]);
+            setcookie("refresh_token", "", [
+                "expires" => time() - 3600,
+                "path" => "/",
+                "secure" => $isSecure,
+                "httponly" => true,
+                "samesite" => $isSecure ? "None" : "Lax"
+            ]);
 
-                Response::json([
-                    "status" => false,
-                    "message" => "Refresh token expired"
-                ], 401);
-                return;
-            }
+            Response::json([
+                "status" => false,
+                "message" => "Refresh token expired"
+            ], 401);
+            return;
+        }
 
         // Rotate refresh token (generate new one)
         $refreshPayload = TokenService::generateRefreshToken();
@@ -585,63 +584,63 @@
             "username" => $tokenData["username"]
         ]);
 
-            Response::json([
-                "status" => true,
-                "message" => "Token refreshed",
-                "data" => [
-                    "access_token" => $accessToken
-                ]
-            ]);
-        }
-        // generate OTP 
-        public static function generateOTP($user_id)
-        {
-            $conn = Database::connect();
+        Response::json([
+            "status" => true,
+            "message" => "Token refreshed",
+            "data" => [
+                "access_token" => $accessToken
+            ]
+        ]);
+    }
+    // generate OTP 
+    public static function generateOTP($user_id)
+    {
+        $conn = Database::connect();
 
         if (!$user_id) {
             $user = Auth::getUser();
             $user_id = $user['user_id'];
         }
 
-            $otpcode = '';
-            for ($i = 0; $i < 8; $i++) {
-                $otpcode .= random_int(0, 9);
-            }
-            $expiryMinutes = 5;
+        $otpcode = '';
+        for ($i = 0; $i < 8; $i++) {
+            $otpcode .= random_int(0, 9);
+        }
+        $expiryMinutes = 5;
 
-            $hashedOtp = password_hash($otpcode, PASSWORD_DEFAULT);
+        $hashedOtp = password_hash($otpcode, PASSWORD_DEFAULT);
 
-            // Clean up existing OTPs for this user
-            $cleanupStmt = $conn->prepare("
+        // Clean up existing OTPs for this user
+        $cleanupStmt = $conn->prepare("
                 DELETE FROM otp 
                 WHERE user_id = ?
             ");
-            $cleanupStmt->bind_param("i", $user_id);
-            $cleanupStmt->execute();
+        $cleanupStmt->bind_param("i", $user_id);
+        $cleanupStmt->execute();
 
-            // Insert new OTP record (NOT USED YET)
-            $stmt = $conn->prepare("
+        // Insert new OTP record (NOT USED YET)
+        $stmt = $conn->prepare("
                 INSERT INTO otp (user_id, otp_code, expiration_time)
                 VALUES (?, ?, NOW() + INTERVAL 5 MINUTE);
             ");
-            $stmt->bind_param("is", $user_id, $hashedOtp);
+        $stmt->bind_param("is", $user_id, $hashedOtp);
 
-            if (!$stmt->execute()) {
-                return false;
-            }
+        if (!$stmt->execute()) {
+            return false;
+        }
 
         return $otpcode;
     }
 
 
-        // Verify OTP
-        public static function verifyOTP($user_id, $otpcode)
-        {
-            $conn = Database::connect();
+    // Verify OTP
+    public static function verifyOTP($user_id, $otpcode)
+    {
+        $conn = Database::connect();
 
 
-            // Get valid OTPs for this user
-            $stmt = $conn->prepare("
+        // Get valid OTPs for this user
+        $stmt = $conn->prepare("
                 SELECT otp_id, otp_code, expiration_time
                 FROM otp
                 WHERE user_id = ? 
@@ -650,46 +649,46 @@
                 ORDER BY created_at DESC
                 LIMIT 1
             ");
-            $stmt->bind_param("i", $user_id);
-            $stmt->execute();
-            $result = $stmt->get_result();
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
 
-            if ($result->num_rows === 0) {
-                Response::json([
-                    'status' => false,
-                    'message' => 'No valid OTP found or OTP has expired'
-                ], 400);
-            }
+        if ($result->num_rows === 0) {
+            Response::json([
+                'status' => false,
+                'message' => 'No valid OTP found or OTP has expired'
+            ], 400);
+        }
 
-            $otpRecord = $result->fetch_assoc();
-            if (!password_verify($otpcode, $otpRecord['otp_code'])) {
-                Response::json([
-                    'status' => false,
-                    'message' => 'Invalid OTP code'
-                ], 401);
-            }
+        $otpRecord = $result->fetch_assoc();
+        if (!password_verify($otpcode, $otpRecord['otp_code'])) {
+            Response::json([
+                'status' => false,
+                'message' => 'Invalid OTP code'
+            ], 401);
+        }
 
-            // Mark OTP as used
-            $updateStmt = $conn->prepare("
+        // Mark OTP as used
+        $updateStmt = $conn->prepare("
                 UPDATE otp 
                 SET is_used = TRUE
                 WHERE otp_id = ?
             ");
-            $updateStmt->bind_param("i", $otpRecord['otp_id']);
-            $updateStmt->execute();
+        $updateStmt->bind_param("i", $otpRecord['otp_id']);
+        $updateStmt->execute();
 
-            // Response::json([
-            //     'status' => true,
-            //     'message' => 'OTP verified successfully'
-            // ]);
-            return true;
+        // Response::json([
+        //     'status' => true,
+        //     'message' => 'OTP verified successfully'
+        // ]);
+        return true;
 
-        }
+    }
 
-        public static function sendEmail($email, $otpcode)
-        {
-            $subject = "Password Rest OTP";
-            $body = "Hello,
+    public static function sendEmail($email, $otpcode)
+    {
+        $subject = "Password Rest OTP";
+        $body = "Hello,
 
             Dear User,
             \n\nYour One-Time Password (OTP) for account verification is:\n\n  $otpcode\n\n This OTP is valid for 2 minutes.PLease Do not share this code with anyone.\n\n
@@ -699,98 +698,98 @@
             Best regards,
             Yukai Support Team";
 
-            if ($email === "") {
-                Response::json([
-                    "status" => false,
-                    "message" => "Email address is required"
-                ], 400);
-            }
+        if ($email === "") {
+            Response::json([
+                "status" => false,
+                "message" => "Email address is required"
+            ], 400);
+        }
 
-            $mail = new PHPMailer(true);
+        $mail = new PHPMailer(true);
 
-            try {
-                $mail->isSMTP();
-                $mail->Host = 'smtp.gmail.com';
-                $mail->SMTPAuth = true;
-                $mail->Username = $_ENV['GMAIL_USERNAME'];
-                $mail->Password = $_ENV['GMAIL_APP_PASSWORD'];
-                $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-                $mail->Port = 587;
+        try {
+            $mail->isSMTP();
+            $mail->Host = 'smtp.gmail.com';
+            $mail->SMTPAuth = true;
+            $mail->Username = $_ENV['GMAIL_USERNAME'];
+            $mail->Password = $_ENV['GMAIL_APP_PASSWORD'];
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+            $mail->Port = 587;
 
-                $mail->CharSet = 'UTF-8';
+            $mail->CharSet = 'UTF-8';
 
             $mail->setFrom($_ENV['GMAIL_USERNAME'], 'Yukai Support Team');
             $mail->addAddress($email);
 
-                $mail->isHTML(false);
-                $mail->Subject = $subject;
-                $mail->Body = $body;
+            $mail->isHTML(false);
+            $mail->Subject = $subject;
+            $mail->Body = $body;
 
-                $mail->send();
-                return true;
-                // Response::json([
-                //     "status" => true,
-                //     "message" => "Email sent successfully"
-                // ]);
+            $mail->send();
+            return true;
+            // Response::json([
+            //     "status" => true,
+            //     "message" => "Email sent successfully"
+            // ]);
 
-            } catch (Exception $e) {
-                Response::json([
-                    "status" => false,
-                    "message" => "Mailer error",
-                    "error" => $mail->ErrorInfo
-                ], 500);
-            }
-
-        }
-
-        //forget password function
-
-        public static function forgetPassword()
-        {
-            $conn = Database::connect();
-            $email = trim(Request::input("email") ?? "");
-
-            if ($email === "") {
-                Response::json([
-                    "status" => false,
-                    "message" => "Email is required"
-                ], 400);
-            }
-            EmailService::validate($email);
-
-            $stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ?");
-            $stmt->bind_param("s", $email);
-            $stmt->execute();
-            $user = $stmt->get_result()->fetch_assoc();
-
-            if (!$user) {
-                Response::json([
-                    "status" => false,
-                    "message" => "User not found"
-                ], 404);
-            }
-
-            $otpcode = self::generateOTP($user['user_id']);
-
-            if (!$otpcode) {
-                Response::json([
-                    "status" => false,
-                    "message" => "Failed to generate OTP"
-                ], 500);
-            }
-
-            self::sendEmail($email, $otpcode);
-
+        } catch (Exception $e) {
             Response::json([
-                "status" => true,
-                "message" => "OTP sent to your email"
-            ]);
+                "status" => false,
+                "message" => "Mailer error",
+                "error" => $mail->ErrorInfo
+            ], 500);
         }
 
-        //reset password
-        public static function resetPassword()
-        {
-            $conn = Database::connect();
+    }
+
+    //forget password function
+
+    public static function forgetPassword()
+    {
+        $conn = Database::connect();
+        $email = trim(Request::input("email") ?? "");
+
+        if ($email === "") {
+            Response::json([
+                "status" => false,
+                "message" => "Email is required"
+            ], 400);
+        }
+        EmailService::validate($email);
+
+        $stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ?");
+        $stmt->bind_param("s", $email);
+        $stmt->execute();
+        $user = $stmt->get_result()->fetch_assoc();
+
+        if (!$user) {
+            Response::json([
+                "status" => false,
+                "message" => "User not found"
+            ], 404);
+        }
+
+        $otpcode = self::generateOTP($user['user_id']);
+
+        if (!$otpcode) {
+            Response::json([
+                "status" => false,
+                "message" => "Failed to generate OTP"
+            ], 500);
+        }
+
+        self::sendEmail($email, $otpcode);
+
+        Response::json([
+            "status" => true,
+            "message" => "OTP sent to your email"
+        ]);
+    }
+
+    //reset password
+    public static function resetPassword()
+    {
+        $conn = Database::connect();
 
         // $user_id = (int) (Request::input("user_id") ?? 0);
         $email = trim(Request::input("email") ?? "");
@@ -813,90 +812,90 @@
         $user_id = $getUserIdResult->fetch_assoc()["user_id"];
 
 
-            if (!self::verifyOTP($user_id, $otpcode)) {
-                Response::json([
-                    "status" => false,
-                    "message" => "Invalid or expired OTP"
-                ], 401);
-            }
-            PasswordService::isStrong($newPassword);
-            $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
-            $stmt = $conn->prepare("UPDATE users SET password = ? WHERE user_id = ?");
-            $stmt->bind_param("si", $hashedPassword, $user_id);
-            $stmt->execute();
-
+        if (!self::verifyOTP($user_id, $otpcode)) {
             Response::json([
-                "status" => true,
-                "message" => "Password reset successfully"
+                "status" => false,
+                "message" => "Invalid or expired OTP"
+            ], 401);
+        }
+        PasswordService::isStrong($newPassword);
+        $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
+        $stmt = $conn->prepare("UPDATE users SET password = ? WHERE user_id = ?");
+        $stmt->bind_param("si", $hashedPassword, $user_id);
+        $stmt->execute();
+
+        Response::json([
+            "status" => true,
+            "message" => "Password reset successfully"
+        ]);
+    }
+
+
+    public static function profile()
+    {
+        echo json_encode(["message" => "profile"]);
+    }
+
+    public static function twoFactorAuthentication()
+    {
+        $conn = Database::connect();
+        $input = Request::json();
+        $user_id = (int) ($input['user_id'] ?? 0);
+        $otpcode = trim($input['otp_code'] ?? "");
+        if (!$user_id || $otpcode === "") {
+            Response::json([
+                "status" => false,
+                "message" => "user_id and otp code is required"
             ]);
         }
+        if (!self::verifyOTP($user_id, $otpcode)) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid input"
+            ]);
+        }
+        $stmt = $conn->prepare("SELECT * FROM users WHERE user_id = ?");
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $user = $stmt->get_result()->fetch_assoc();
 
-
-        public static function profile()
-        {
-            echo json_encode(["message" => "profile"]);
+        if (!$user) {
+            Response::json([
+                "status" => false,
+                "message" => "User not found"
+            ], 404);
         }
 
-        public static function twoFactorAuthentication()
-        {
-            $conn = Database::connect();
-            $input = Request::json();
-            $user_id = (int) ($input['user_id'] ?? 0);
-            $otpcode = trim($input['otp_code'] ?? "");
-            if (!$user_id || $otpcode === "") {
-                Response::json([
-                    "status" => false,
-                    "message" => "user_id and otp code is required"
-                ]);
-            }
-            if (!self::verifyOTP($user_id, $otpcode)) {
-                Response::json([
-                    "status" => false,
-                    "message" => "Invalid input"
-                ]);
-            }
-            $stmt = $conn->prepare("SELECT * FROM users WHERE user_id = ?");
-            $stmt->bind_param("i", $user_id);
-            $stmt->execute();
-            $user = $stmt->get_result()->fetch_assoc();
+        $accessToken = TokenService::generateAccessToken(
+            [
+                "user_id" => $user["user_id"],
+                "username" => $user["username"],
+                "two_factor_verified" => true
+            ],
+            1800
+        );
 
-            if (!$user) {
-                Response::json([
-                    "status" => false,
-                    "message" => "User not found"
-                ], 404);
-            }
+        $refreshPayload = TokenService::generateRefreshToken();
+        $refreshToken = $refreshPayload["token"];
+        $refreshHash = $refreshPayload["hash"];
 
-            $accessToken = TokenService::generateAccessToken(
-                [
-                    "user_id" => $user["user_id"],
-                    "username" => $user["username"],
-                    "two_factor_verified" => true
-                ],
-                1800
-            );
+        $expireAt = date("Y-m-d H:i:s", time() + 604800);
 
-            $refreshPayload = TokenService::generateRefreshToken();
-            $refreshToken = $refreshPayload["token"];
-            $refreshHash = $refreshPayload["hash"];
-
-            $expireAt = date("Y-m-d H:i:s", time() + 604800);
-
-            $update = $conn->prepare("
+        $update = $conn->prepare("
                 UPDATE users 
                 SET refresh_token = ?, refresh_token_expire_time = ?
                 WHERE user_id = ?
             ");
-            $update->bind_param("ssi", $refreshHash, $expireAt, $user["user_id"]);
-            $update->execute();
+        $update->bind_param("ssi", $refreshHash, $expireAt, $user["user_id"]);
+        $update->execute();
 
-            setcookie("refresh_token", $refreshToken, [
-                "expires" => time() + 604800,
-                "path" => "/",
-                "secure" => true,
-                "httponly" => true,
-                "samesite" => "None"
-            ]);
+        setcookie("refresh_token", $refreshToken, [
+            "expires" => time() + 604800,
+            "path" => "/",
+            "secure" => true,
+            "httponly" => true,
+            "samesite" => "None"
+        ]);
 
         Response::json([
             "status" => true,
