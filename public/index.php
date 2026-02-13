@@ -33,6 +33,7 @@ require_once __DIR__ . "/../app/Core/Auth.php";
 require_once __DIR__ . "/../app/services/passwordService.php";
 require_once __DIR__ . "/../app/services/tokenService.php";
 require_once __DIR__ . "/../app/services/imageService.php";
+require_once __DIR__ . "/../app/services/emailService.php";
 
 require_once __DIR__ . "/../app/Controllers/AuthController.php";
 require_once __DIR__ . "/../app/Controllers/PostController.php";
@@ -44,6 +45,7 @@ require_once __DIR__ . "/../app/Controllers/SaveController.php";
 require_once __DIR__ . "/../app/Controllers/ChatController.php";
 require_once __DIR__ . "/../app/Controllers/MessageController.php";
 require_once __DIR__ . "/../app/Controllers/ReportController.php";
+require_once __DIR__ . "/../app/Controllers/AdminController.php";
 require_once __DIR__ . "/../app/Controllers/DeviceController.php";
 require_once __DIR__ . "/../app/Controllers/NotificationController.php";
 

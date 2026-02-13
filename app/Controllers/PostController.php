@@ -848,6 +848,17 @@ ORDER BY p.updated_at DESC LIMIT 1;
                 "message" => "Invalid creator"
             ], 400);
         }
+        // $userSql="SELECT user_id,is_active from users where user_id=?";
+        // $user   =$conn->prepare($userSql);
+        // $user   ->bind_param("i",$creator_id);
+        // $user   ->execute();
+        // $userResult=$user->get_result()->fetch_assoc();
+        // if((int)$userResult['is_active']===0){
+        //     Response::json([
+        //         "status"=>false,
+        //         "message"=>"you cannot create post(Inactive user)"
+        //     ]);
+        // }
 
         // Start transaction
         $conn->begin_transaction();
@@ -1065,8 +1076,248 @@ ORDER BY p.updated_at DESC LIMIT 1;
                 "error" => $e->getMessage()
             ], 500);
         }
+
+
+        $tag_friends = Request::input("tag_friends") ?? [];
+
+        if ($creator_id === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid creator"
+            ], 400);
+        }
+
+        // Start transaction
+        $conn->begin_transaction();
+
+        try {
+            // =============================
+            // Insert post
+            // =============================
+            $sql = "INSERT INTO posts 
+                (creator_user_id, content, privacy, shared_post_id, is_draft, is_archived, is_deleted, is_shared, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, 0, ?, NOW())";
+
+            $is_shared = $shared_post_id ? 1 : 0;
+
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param(
+                "issiiii",
+                $creator_id,
+                $content,
+                $privacy,
+                $shared_post_id,
+                $is_draft,
+                $is_archived,
+                $is_shared
+            );
+
+            $stmt->execute();
+
+            $post_id = $conn->insert_id;
+
+            // =============================
+            // Handle post_attachments (optional)
+            // =============================
+            if (!empty($_FILES['attachments'])) {
+                foreach ($_FILES['attachments']['tmp_name'] as $index => $tmpPath) {
+                    if (!is_uploaded_file($tmpPath))
+                        continue;
+
+                    $fileArray = [
+                        "tmp_name" => $_FILES['attachments']['tmp_name'][$index],
+                        "name" => $_FILES['attachments']['name'][$index],
+                        "type" => $_FILES['attachments']['type'][$index],
+                        "error" => $_FILES['attachments']['error'][$index],
+                        "size" => $_FILES['attachments']['size'][$index],
+                    ];
+
+                    // Upload using ImageService
+                    $uploadResult = ImageService::uploadImage($fileArray, "posts-images");
+
+                    // Store in DB
+                    $attachSql = "
+                    INSERT INTO post_attachments (post_id, file_path, type)
+                    VALUES (?, ?, ?)
+                ";
+                    $stmtAttach = $conn->prepare($attachSql);
+                    $fileUrl = $uploadResult["secure_url"];
+                    // $mime = mime_content_type($fileArray['tmp_name']) ?? "application/octet-stream";
+                    $fileType = explode("/", $fileArray['type'])[0];
+
+                    $stmtAttach->bind_param(
+                        "iss",
+                        $post_id,
+                        $fileUrl,
+                        $fileType
+                    );
+                    $stmtAttach->execute();
+                }
+            }
+
+            if (is_array($tag_friends) && empty($tag_friends)) {
+                $tag_sql = "INSERT INTO post_tags (post_id, tagged_user_id) VALUES (?, ?)";
+                $check_sql = "SELECT post_tag_id FROM post_tags WHERE post_id = ? AND tagged_user_id = ?";
+
+                $tag_stmt = $conn->prepare($tag_sql);
+                $check_stmt = $conn->prepare($check_sql);
+                // $alreadyTagged = [];
+
+                foreach ($tag_friends as $user_id) {
+                    $user_id = (int) $user_id;
+                    if ($user_id <= 0)
+                        continue;
+
+                    $check_stmt->bind_param("ii", $post_id, $user_id);
+                    $check_stmt->execute();
+                    $check_result = $check_stmt->get_result();
+
+                    if ($check_result->num_rows > 0) {
+                        // $alreadyTagged[] = $user_id;
+                        continue;
+                    }
+
+                    $tag_stmt->bind_param("ii", $post_id, $user_id);
+                    $tag_stmt->execute();
+                }
+            }
+
+
+            // Commit transaction
+            $conn->commit();
+
+            $sql = "SELECT 
+                    p.post_id,
+                    p.creator_user_id,
+                    p.shared_post_id,
+                    p.privacy,
+                    p.content,
+                    p.is_archived,
+                    p.is_draft,
+                    p.is_deleted,
+                    p.is_shared,
+                    p.created_at,
+                    p.updated_at,
+
+                    u.display_name,
+                    u.gender,
+                    u.profile_image,
+                    u.username,
+
+                    COUNT(DISTINCT r.post_react_id) AS react_count,
+                    COUNT(DISTINCT c.post_comment_id) AS comment_count,
+
+                    CASE 
+                        WHEN COUNT(ur.post_react_id) > 0 THEN 1
+                        ELSE 0
+                    END AS is_liked,
+
+                    MAX(ur.reaction) AS reaction
+
+                FROM posts p
+                JOIN users u 
+                    ON u.user_id = p.creator_user_id
+
+                LEFT JOIN post_reacts r 
+                    ON r.post_id = p.post_id
+
+                LEFT JOIN post_comments c 
+                    ON c.post_id = p.post_id
+
+                LEFT JOIN post_reacts ur 
+                    ON ur.post_id = p.post_id
+                   AND ur.user_id = ?
+
+                WHERE 
+                    p.post_id = ?
+                    AND p.is_deleted = 0
+                    AND (
+                        p.privacy = ?
+                        OR p.creator_user_id = ?
+                    )
+
+                GROUP BY p.post_id";
+
+            // FIX: Changed $user_id to $creator_id
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("iisi", $creator_id, $post_id, $privacy, $creator_id);
+            $stmt->execute();
+
+            $result = $stmt->get_result();
+            $post = $result->fetch_assoc();
+
+            if (!$post) {
+                Response::json([
+                    "status" => false,
+                    "message" => "Post not found or access denied"
+                ], 404);
+                return;
+            }
+
+            $post["creator"] = [
+                "id" => $post["creator_user_id"],
+                "display_name" => $post["display_name"],
+                "gender" => $post["gender"],
+                "profile_image" => $post["profile_image"]
+            ];
+
+            unset(
+                $post["display_name"],
+                $post["gender"],
+                $post["profile_image"],
+                $post["username"]
+            );
+            $posts = [
+                $post["post_id"] => $post
+            ];
+
+            self::attachAttachments($conn, $posts);
+
+            Response::json([
+                "status" => true,
+                "message" => "Post created successfully",
+                "post_id" => $post_id,
+                "privacy" => $privacy,
+                "data" => array_values($posts)
+            ]);
+
+        } catch (\Throwable $e) {
+
+            $conn->rollback();
+
+            Response::json([
+                "status" => false,
+                "message" => "Failed to create post",
+                "error" => $e->getMessage()
+            ], 500);
+        }
     }
 
+    private static function getUserDefaultPrivacy($userId)
+    {
+        $conn = Database::connect();
+
+        // Make sure we're using the yukai database
+        $conn->select_db("yukai");
+
+        $sql = "SELECT default_privacy FROM user_privacy_settings WHERE user_id = ?";
+        $stmt = $conn->prepare($sql);
+
+        if (!$stmt) {
+            error_log("SQL Error: " . $conn->error);
+            return 'public'; // Fallback
+        }
+
+        $stmt->bind_param("i", $userId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        if ($row = $result->fetch_assoc()) {
+            return $row['default_privacy'];
+        }
+
+        return 'public'; // Default value
+    }
     /* =====================================================
      * Edit Post
      * ===================================================== */
@@ -1802,6 +2053,18 @@ GROUP BY p.post_id
                 "message" => "Cannot find post"
             ], 500);
         }
+        $postSql="SELECT post_id,is_banned from posts where post_id=?";
+        $postStmt  =$conn->prepare($postSql);
+        $postStmt->bind_param("i",$post_id);
+        $postStmt ->execute();
+        $post=$postStmt->get_result()->fetch_assoc();
+        if((int)$post['is_banned']===1){
+            Response::json([
+                "status"=>false,
+                "message"=>"you cannot comment this post(isBanned)"
+            ]);
+        }
+        
 
         $sql = "Insert into post_comments(post_id,user_id,comment) values (?,?,?)";
 

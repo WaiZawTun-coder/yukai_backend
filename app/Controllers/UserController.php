@@ -6,6 +6,8 @@ use App\Core\Database;
 use App\Core\Response;
 use App\Core\Request;
 use App\Service\ImageService;
+use App\Service\PasswordService;
+use App\Service\EmailService;
 
 class UserController
 {
@@ -172,17 +174,16 @@ class UserController
     // user edit
     public static function editUser()
     {
-
         $conn = Database::connect();
         $user_id = (int) (Request::input("user_id") ?? 0);
         $display_name = trim(Request::input("display_name") ?? "");
         $email = trim(Request::input("email") ?? "");
+        $password = trim(Request::input('password') ?? "");
         $bio = trim(Request::input("bio") ?? "");
         // $profile_image = trim(Request::input("profile_image") ?? "");
         $profile_image = Request::file("profile_image");
         $cover_image = Request::file("cover_image");
         $phone_number = trim(Request::input("phone_number") ?? "");
-
 
         // Check user exists
         $sql = "SELECT * FROM users WHERE user_id = ?";
@@ -200,14 +201,13 @@ class UserController
         }
 
         $user = $result->fetch_assoc();
-        $updates = $updates ?? [];
-        $params = $params ?? [];
+        $updates = []; // Initialize as empty array
+        $params = [];  // Initialize as empty array
         $types = "";
 
         // =====================================
         // NORMAL PROFILE UPDATES
         // =====================================
-
 
         if (!empty($display_name)) {
             $updates[] = "display_name = ?";
@@ -215,78 +215,103 @@ class UserController
             $types .= "s";
         }
         if (!empty($email)) {
-            $updates[] = "email = ?";
-            $params[] = $email;
-            $types .= "s";
-        }
-        if (!empty($bio)) {
-            $updates[] = "bio = ?";
-            $params[] = $bio;
-            $types .= "s";
-        }
-        if (!empty($profile_image)) {
-            $profileImageUResult = ImageService::uploadImage($profile_image);
-            $profileImageUrl = $profileImageUResult["secure_url"] ?? "";
-            if ($profileImageUrl == "") {
+            EmailService::validate($email);
+            if ($email !== $user['email']) {
+                // Check if new email already exists for another admin
+                $checkEmailSql = "SELECT admin_id FROM admin WHERE email = ? AND admin_id != ?";
+                $checkStmt = $conn->prepare($checkEmailSql);
+                $checkStmt->bind_param("si", $email, $admin_id);
+                $checkStmt->execute();
+                $emailResult = $checkStmt->get_result();
+
+                if ($emailResult->num_rows > 0) {
+                    Response::json([
+                        "status" => false,
+                        "message" => "Email already exists"
+                    ]);
+
+                }
+            }
+            if (!empty($password)) {
+                PasswordService::isStrong($password);
+                $hashpwd = password_hash($password, PASSWORD_DEFAULT);
+                $updates[] = "password = ?";
+                $params[] = $hashpwd;
+                $types .= "s";
+            }
+            if (!empty($bio)) {
+                $updates[] = "bio = ?";
+                $params[] = $bio;
+                $types .= "s";
+            }
+            if (!empty($profile_image)) {
+                $profileImageUResult = ImageService::uploadImage($profile_image);
+                $profileImageUrl = $profileImageUResult["secure_url"] ?? "";
+                if ($profileImageUrl == "") {
+                    Response::json([
+                        "status" => false,
+                        "message" => "Failed to upload profile image"
+                    ], 500);
+                    return;
+                }
+                $updates[] = "profile_image = ?";
+                $params[] = $profileImageUrl;
+                $types .= "s";
+            }
+            if (!empty($cover_image)) {
+                $coverImageResult = ImageService::uploadImage($cover_image);
+                $coverImageUrl = $coverImageResult["secure_url"] ?? "";
+                if ($coverImageUrl == "") {
+                    Response::json([
+                        "status" => false,
+                        "message" => "Failed to upload cover image"
+                    ], 500);
+                    return;
+                }
+                $updates[] = "cover_image = ?";
+                $params[] = $coverImageUrl;
+                $types .= "s";
+            }
+            if (!empty($phone_number)) {
+                $updates[] = "phone_number = ?";
+                $params[] = $phone_number;
+                $types .= "s";
+            }
+
+            // Nothing to update
+            if (empty($updates)) {
                 Response::json([
                     "status" => false,
-                    "message" => "Failed to upload profile image"
-                ], 500);
+                    "message" => "No fields to update"
+                ], 400);
                 return;
             }
-            $updates[] = "profile_image = ?";
-            $params[] = $profileImageUrl;
-            $types .= "s";
-        }
-        if (!empty($cover_image)) {
-            $coverImageResult = ImageService::uploadImage($cover_image);
-            $coverImageUrl = $coverImageResult["secure_url"] ?? "";
-            if ($coverImageUrl == "") {
-                Response::json([
-                    "status" => false,
-                    "message" => "Failed to upload cover image"
-                ], 500);
-                return;
-            }
-            $updates[] = "cover_image = ?";
-            $params[] = $coverImageUrl;
-            $types .= "s";
-        }
-        if (!empty($phone_number)) {
-            $updates[] = "phone_number = ?";
-            $params[] = $phone_number;
-            $types .= "s";
-        }
 
+            $params[] = $user_id;
+            $types .= "i";
 
-        // Nothing to update
-        if (empty($updates)) {
-            Response::json([
-                "status" => false,
-                "message" => "No fields to update"
-            ], 400);
-            return;
-        }
+            $sql = "UPDATE users SET " . implode(" ,", $updates) . " WHERE user_id=?";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param($types, ...$params);
 
-
-        $params[] = $user_id;
-        $types .= "i";
-
-        $sql = "UPDATE users SET " . implode(" ,", $updates) . " WHERE user_id=?";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param($types, ...$params);
-
-        if ($stmt->execute()) {
-            if ($stmt->affected_rows > 0) {
-                Response::json([
-                    "status" => true,
-                    "message" => "User updated successfully"
-                ], 200);
+            if ($stmt->execute()) {
+                if ($stmt->affected_rows > 0) {
+                    Response::json([
+                        "status" => true,
+                        "message" => "User updated successfully"
+                    ], 200);
+                } else {
+                    Response::json([
+                        "status" => false,
+                        "message" => "No changes were made"
+                    ], 200);
+                }
             } else {
+                // THIS WAS MISSING! Handle execute() failure
                 Response::json([
                     "status" => false,
-                    "message" => "No changes were made"
-                ], 200);
+                    "message" => "Database error: " . $stmt->error
+                ], 500);
             }
         }
     }
@@ -366,7 +391,7 @@ class UserController
         }
 
         // Check user exists
-        $stmt = $conn->prepare("SELECT password FROM users WHERE user_id = ?");
+        $stmt = $conn->prepare("SELECT password, email FROM users WHERE user_id = ?");
         $stmt->bind_param("i", $user_id);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -402,10 +427,10 @@ class UserController
             }
         }
 
-        // Hash new password
+        // 3. Hash new password
         $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
 
-        // Update password
+        // 4. Update password
         $update = $conn->prepare("UPDATE users SET password = ? WHERE user_id = ?");
         $update->bind_param("si", $hashed_password, $user_id);
 
@@ -466,6 +491,54 @@ class UserController
             ], 500);
         }
     }
+    // In UserController.php or AuthController.php
+    public static function generateOTPApi()
+    {
+        $conn = Database::connect();
+        $user_id = (int) (Request::input("user_id") ?? 0);
+
+        if ($user_id <= 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid user ID"
+            ], 400);
+            return;
+        }
+
+        // Check user exists
+        $stmt = $conn->prepare("SELECT email FROM users WHERE user_id = ?");
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        if ($result->num_rows === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "User not found"
+            ], 404);
+            return;
+        }
+
+        $user = $result->fetch_assoc();
+
+        // Generate OTP using your existing function
+        $otp = AuthController::generateOTP($user_id);
+
+        if ($otp === false) {
+            Response::json([
+                "status" => false,
+                "message" => "Failed to generate OTP"
+            ], 500);
+            return;
+        }
+
+        // In production: Send OTP via email/SMS here
+        // For now, just return success
+        Response::json([
+            "status" => true,
+            "message" => "OTP sent successfully to " . $user['email']
+        ], 200);
+    }
 
     //deleted account
     public static function deletedAccount()
@@ -507,7 +580,7 @@ class UserController
         } else {
             Response::json([
                 "status" => false,
-                "message" => "Failed to deleted userr account"
+                "message" => "Failed to deleted user account"
             ], 500);
         }
     }
@@ -556,6 +629,35 @@ class UserController
                 "message" => "Failed to deactivate your account"
             ], 500);
         }
+    }
+
+    public static function getAccountHealth()
+    {
+        $user = Auth::getUser();
+        $user_id = $user["user_id"];
+
+        if (!$user_id) {
+            Response::json([
+                "status" => false,
+                "message" => "Not Authorized"
+            ], 400);
+            return;
+        }
+
+        $conn = Database::connect();
+        $sql = "SELECT status FROM users WHERE user_id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        $row = $result->fetch_assoc();
+
+        Response::json([
+            "status" => true,
+            "account_health" => $row["status"]
+        ]);
+        return;
     }
 
 }
