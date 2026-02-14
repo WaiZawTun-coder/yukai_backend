@@ -67,8 +67,8 @@ class UserController
             (
                 SELECT COUNT(*) 
                 FROM friends fr
-                WHERE fr.user_1_id = u.user_id
-                   OR fr.user_2_id = u.user_id
+                WHERE (fr.user_1_id = u.user_id
+                   OR fr.user_2_id = u.user_id) AND fr.status = 'accepted'
             ) AS friends_count,
 
             -- friend status (NULL if own profile)
