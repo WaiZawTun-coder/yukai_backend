@@ -16,7 +16,7 @@ class ImageController
         $user = Auth::getUser();
         $user_id = $user["user_id"];
 
-        $folder = Request::file("folder");
+        $folder = Request::file("folder") ?? "chat";
 
         if ($user_id <= 0) {
             Response::json([
