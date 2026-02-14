@@ -228,8 +228,8 @@ class ChatController
 
                 // Add participants
                 $participantStmt = $conn->prepare("
-            INSERT INTO chat_participants (chat_id, user_id, encrypted_key)
-            VALUES (?, ?, '')
+            INSERT INTO chat_participants (chat_id, user_id)
+            VALUES (?, ?)
         ");
 
                 $participantStmt->bind_param("ii", $chat_id, $me);
@@ -517,7 +517,7 @@ class ChatController
             $stmt->execute();
             $chat_id = $stmt->insert_id;
 
-            $stmt = $conn->prepare("INSERT INTO chat_participants (chat_id, user_id, encrypted_key) VALUES (?, ?, '')");
+            $stmt = $conn->prepare("INSERT INTO chat_participants (chat_id, user_id) VALUES (?, ?)");
             $stmt->bind_param("ii", $chat_id, $me);
             $stmt->execute();
             $stmt->bind_param("ii", $chat_id, $target_id);
@@ -557,7 +557,7 @@ class ChatController
             $stmt->execute();
             $chat_id = $stmt->insert_id;
 
-            $insert = $conn->prepare("INSERT INTO chat_participants (chat_id, user_id, encrypted_key) VALUES (?, ?, '')");
+            $insert = $conn->prepare("INSERT INTO chat_participants (chat_id, user_id) VALUES (?, ?)");
             $insert->bind_param("ii", $chat_id, $me);
             $insert->execute();
 
@@ -592,7 +592,7 @@ class ChatController
             return;
         }
 
-        $sql = "INSERT INTO chat_participants (chat_id, user_id, encrypted_key) VALUES (?, ?, '')";
+        $sql = "INSERT INTO chat_participants (chat_id, user_id) VALUES (?, ?)";
         $stmt = $conn->prepare($sql);
 
         foreach ($members as $uid) {
