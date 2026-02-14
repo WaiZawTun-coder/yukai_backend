@@ -1056,6 +1056,7 @@ ORDER BY p.updated_at DESC LIMIT 1;
             ];
 
             self::attachAttachments($conn, $posts);
+            self::attachTaggedUsers($conn, $posts);
 
             Response::json([
                 "status" => true,
