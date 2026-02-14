@@ -340,6 +340,7 @@ WHERE p.is_deleted = 0
             )
         )
         OR (p.privacy = 'private' AND p.creator_user_id = ?)
+        OR (p.creator_user_id = ?)
   )
 
 ORDER BY p.created_at DESC
@@ -349,7 +350,7 @@ LIMIT ? OFFSET ?;
     ";
 
         $stmt = $conn->prepare($sql);
-        $stmt->bind_param("iisiiiii", $user_id, $user_id, $username, $user_id, $user_id, $user_id, $limit, $offset);
+        $stmt->bind_param("iisiiiiii", $user_id, $user_id, $username, $user_id, $user_id, $user_id, $user_id, $limit, $offset);
         $stmt->execute();
 
         $result = $stmt->get_result();
