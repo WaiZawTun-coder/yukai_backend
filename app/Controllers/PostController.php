@@ -2109,6 +2109,7 @@ GROUP BY p.post_id
                                     (f.user_1_id = p.creator_user_id AND f.user_2_id = ?)
                                     OR (f.user_2_id = p.creator_user_id AND f.user_1_id = ?)
                                 )
+                                AND p.privacy = 'public'
                         ))
                         OR (p.privacy='private' AND p.creator_user_id = ?)
                     )
