@@ -735,91 +735,124 @@ class FriendController
 
     }
     public static function unblockUser()
-    {
-        $conn = Database::connect();
-        $input = Request::json();
-        $unblock_user = (int) ($input['unblock_user'] ?? 0);
-        $unblocked_user = (int) ($input['unblocked_user'] ?? 0);
-        if ($unblock_user === $unblocked_user || $unblock_user === 0 || $unblocked_user === 0) {
-            Response::json([
-                "status" => false,
-                "message" => "Invalid user_id"
-            ]);
-        }
-        $unblockuserSql = "DELETE FROM blocks where blocker_user_id=? and blocked_user_id=?";
-        $unblockuser = $conn->prepare($unblockuserSql);
-        $unblockuser->bind_param("ii", $unblock_user, $unblocked_user);
-        $unblockuser->execute();
-        if ($unblockuser->affected_rows > 0) {
-            Response::json([
-                "status" => true,
-                "message" => "Unblock this user"
-            ]);
-        } else {
-            Response::json([
-                "status" => false,
-                "message" => "you did not block this user so u cannot make unblocking process"
-            ]);
-        }
-
+{
+    $conn = Database::connect();
+    $input = Request::json();
+    $unblock_user = (int) ($input['unblock_user'] ?? 0);
+    $unblocked_user = (int) ($input['unblocked_user'] ?? 0);
+    
+    if ($unblock_user === $unblocked_user || $unblock_user === 0 || $unblocked_user === 0) {
+        Response::json([
+            "status" => false,
+            "message" => "Invalid user_id"
+        ]);
+        return;
     }
-    //get block frineds
-
-    public static function getBlockLists()
-    {
-        $conn = Database::connect();
-        // Current page
-        $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
-        $limit = 5;
-        $offset = ($page - 1) * $limit;
-
-        /* ---------- COUNT TOTAL ROWS ---------- */
-        $countStmt = $conn->prepare("SELECT COUNT(*) as total FROM blocks ");
-        $countStmt->execute();
-        $countResult = $countStmt->get_result()->fetch_assoc();
-
-        $totalRecords = (int) $countResult['total'];
-        $totalPages = ceil($totalRecords / $limit);
-
-        if ($totalRecords === 0) {
-            Response::json([
-                "status" => false,
-                "message" => "Block is not found"
-            ]);
-            return;
-        }
-
-        /* ---------- FETCH DATA ---------- */
-        $stmt = $conn->prepare(
-            "SELECT *
-
-            FROM blocks bl
-            ORDER BY bl.created_at DESC
-            LIMIT ? OFFSET ?"
-        );
-
-        $stmt->bind_param("ii", $limit, $offset);
-        $stmt->execute();
-        $result = $stmt->get_result();
-
-        $blockAccounts = [];
-        while ($row = $result->fetch_assoc()) {
-            $blockAccounts[] = $row;
-        }
-
-        /* ---------- RESPONSE ---------- */
+    
+    $unblockuserSql = "DELETE FROM blocks WHERE blocker_user_id = ? AND blocked_user_id = ?";
+    $unblockuser = $conn->prepare($unblockuserSql);
+    $unblockuser->bind_param("ii", $unblock_user, $unblocked_user);
+    $unblockuser->execute();
+    
+    if ($unblockuser->affected_rows > 0) {
         Response::json([
             "status" => true,
+            "message" => "User unblocked successfully"
+        ]);
+    } else {
+        Response::json([
+            "status" => false,
+            "message" => "You have not blocked this user"
+        ]);
+    }
+}
+
+// Get blocked friends
+public static function getBlockLists()
+{
+    $conn = Database::connect();
+    
+    // Get current user ID from session
+    $currentUserId = $_SESSION['user_id'] ?? 0;
+    
+    if ($currentUserId === 0) {
+        Response::json([
+            "status" => false,
+            "message" => "User not authenticated"
+        ]);
+        return;
+    }
+    
+    // Current page
+    $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
+    $limit = 5;
+    $offset = ($page - 1) * $limit;
+
+    /* ---------- COUNT TOTAL ROWS ---------- */
+    $countStmt = $conn->prepare("SELECT COUNT(*) as total FROM blocks WHERE blocker_user_id = ?");
+    $countStmt->bind_param("i", $currentUserId);
+    $countStmt->execute();
+    $countResult = $countStmt->get_result()->fetch_assoc();
+
+    $totalRecords = (int) $countResult['total'];
+    $totalPages = ceil($totalRecords / $limit);
+
+    if ($totalRecords === 0) {
+        Response::json([
+            "status" => true,
+            "message" => "No blocked users found",
             "current_page" => $page,
             "limit" => $limit,
             "total_pages" => $totalPages,
             "total_records" => $totalRecords,
-            "data" => $blockAccounts
+            "data" => []
         ]);
-
-
-
+        return;
     }
+
+    /* ---------- FETCH DATA WITH USER DETAILS ---------- */
+    $stmt = $conn->prepare(
+        "SELECT 
+            b.*,
+            u.username,
+            u.display_name as name,
+            u.profile_image as avatar,
+            u.bio
+        FROM blocks b
+        LEFT JOIN users u ON b.blocked_user_id = u.id
+        WHERE b.blocker_user_id = ?
+        ORDER BY b.created_at DESC
+        LIMIT ? OFFSET ?"
+    );
+
+    $stmt->bind_param("iii", $currentUserId, $limit, $offset);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    $blockAccounts = [];
+    while ($row = $result->fetch_assoc()) {
+        $blockAccounts[] = [
+            'id' => $row['id'],
+            'blocker_user_id' => $row['blocker_user_id'],
+            'blocked_user_id' => $row['blocked_user_id'],
+            'created_at' => $row['created_at'],
+            'username' => $row['username'],
+            'name' => $row['name'] ?? 'Unknown User',
+            'avatar' => $row['avatar'] ?? '',
+            'bio' => $row['bio'] ?? ''
+        ];
+    }
+
+    /* ---------- RESPONSE ---------- */
+    Response::json([
+        "status" => true,
+        "current_page" => $page,
+        "limit" => $limit,  
+        "total_pages" => $totalPages,
+        "total_records" => $totalRecords,
+        "data" => $blockAccounts
+    ]);
+}
     public static function unfriend()
     {
         $conn = Database::connect();
