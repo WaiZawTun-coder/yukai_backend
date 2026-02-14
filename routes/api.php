@@ -463,7 +463,7 @@ Router::add(
     "/api/getBlock-lists",
     fn() =>
     FriendController::getBlockLists(),
-    true
+    true,
 );
 
 Router::add(

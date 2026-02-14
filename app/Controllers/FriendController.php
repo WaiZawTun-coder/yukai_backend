@@ -771,9 +771,10 @@ class FriendController
 public static function getBlockLists()
 {
     $conn = Database::connect();
+    $user = Auth::getUser();
     
     // Get current user ID from session
-    $currentUserId = $_SESSION['user_id'] ?? 0;
+    $currentUserId = $user['user_id'] ?? 0;
     
     if ($currentUserId === 0) {
         Response::json([
