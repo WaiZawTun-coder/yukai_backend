@@ -691,6 +691,8 @@ class FriendController
         $user = Auth::getUser();
         $blocker_User = $user["user_id"];//login user
         $blocked_User = (int) ($input['blocked_user_id'] ?? 0);
+        
+       
         //self block
         if ($blocker_User === $blocked_User || $blocked_User === 0 || $blocker_User === 0) {
             Response::json([
@@ -738,7 +740,8 @@ class FriendController
 {
     $conn = Database::connect();
     $input = Request::json();
-    $unblock_user = (int) ($input['unblock_user'] ?? 0);
+    $user=Auth::getUser();
+    $unblock_user =$user["user_id"];//login user
     $unblocked_user = (int) ($input['unblocked_user'] ?? 0);
     
     if ($unblock_user === $unblocked_user || $unblock_user === 0 || $unblocked_user === 0) {
@@ -775,6 +778,7 @@ public static function getBlockLists()
     
     // Get current user ID from session
     $currentUserId = $user['user_id'] ?? 0;
+    // $currentUserId=(int)(Request::input("user_id")?? 0);
     
     if ($currentUserId === 0) {
         Response::json([
@@ -820,7 +824,7 @@ public static function getBlockLists()
             u.profile_image as avatar,
             u.bio
         FROM blocks b
-        LEFT JOIN users u ON b.blocked_user_id = u.id
+        LEFT JOIN users u ON b.blocked_user_id = u.user_id
         WHERE b.blocker_user_id = ?
         ORDER BY b.created_at DESC
         LIMIT ? OFFSET ?"
@@ -833,7 +837,7 @@ public static function getBlockLists()
     $blockAccounts = [];
     while ($row = $result->fetch_assoc()) {
         $blockAccounts[] = [
-            'id' => $row['id'],
+            
             'blocker_user_id' => $row['blocker_user_id'],
             'blocked_user_id' => $row['blocked_user_id'],
             'created_at' => $row['created_at'],

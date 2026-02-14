@@ -442,29 +442,29 @@ Router::add(
     true,
 );
 
-Router::add(
-    "POST",
-    "/api/block-user",
-    fn() =>
-    FriendController::blockUser(),
-    true,
-);
+    Router::add(
+        "POST",
+        "/api/block-user",
+        fn() =>
+        FriendController::blockUser(),
+        false,
+    );
 
-Router::add(
-    "POST",
-    "/api/unblock",
-    fn() =>
-    FriendController::unblockUser(),
-    true
-);
+    Router::add(
+        "POST",
+        "/api/unblock",
+        fn() =>
+        FriendController::unblockUser(),
+        true
+    );
 
-Router::add(
-    "GET",
-    "/api/getBlock-lists",
-    fn() =>
-    FriendController::getBlockLists(),
-    true
-);
+    Router::add(
+        "GET",
+        "/api/getBlock-lists",
+        fn() =>
+        FriendController::getBlockLists(),
+        true
+    );
 
 Router::add(
     "POST",
