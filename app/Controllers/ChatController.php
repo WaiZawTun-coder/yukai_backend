@@ -228,8 +228,8 @@ class ChatController
 
                 // Add participants
                 $participantStmt = $conn->prepare("
-            INSERT INTO chat_participants (chat_id, user_id, encrypted_key)
-            VALUES (?, ?, '')
+            INSERT INTO chat_participants (chat_id, user_id)
+            VALUES (?, ?)
         ");
 
                 $participantStmt->bind_param("ii", $chat_id, $me);
@@ -517,7 +517,7 @@ class ChatController
             $stmt->execute();
             $chat_id = $stmt->insert_id;
 
-            $stmt = $conn->prepare("INSERT INTO chat_participants (chat_id, user_id, encrypted_key) VALUES (?, ?, '')");
+            $stmt = $conn->prepare("INSERT INTO chat_participants (chat_id, user_id) VALUES (?, ?)");
             $stmt->bind_param("ii", $chat_id, $me);
             $stmt->execute();
             $stmt->bind_param("ii", $chat_id, $target_id);
@@ -557,7 +557,7 @@ class ChatController
             $stmt->execute();
             $chat_id = $stmt->insert_id;
 
-            $insert = $conn->prepare("INSERT INTO chat_participants (chat_id, user_id, encrypted_key) VALUES (?, ?, '')");
+            $insert = $conn->prepare("INSERT INTO chat_participants (chat_id, user_id) VALUES (?, ?)");
             $insert->bind_param("ii", $chat_id, $me);
             $insert->execute();
 
@@ -592,7 +592,7 @@ class ChatController
             return;
         }
 
-        $sql = "INSERT INTO chat_participants (chat_id, user_id, encrypted_key) VALUES (?, ?, '')";
+        $sql = "INSERT INTO chat_participants (chat_id, user_id) VALUES (?, ?)";
         $stmt = $conn->prepare($sql);
 
         foreach ($members as $uid) {
@@ -642,6 +642,7 @@ class ChatController
                u.profile_image,
                u.gender,
                cp.joined_at,
+               cp.is_muted,
                d.device_id,
                d.identity_key_pub,
                d.signed_prekey_pub,
@@ -672,7 +673,8 @@ class ChatController
                     "profile_image" => $row["profile_image"],
                     "joined_at" => $row["joined_at"],
                     "gender" => $row["gender"],
-                    "devices" => []
+                    "devices" => [],
+                    "is_muted" => $row["is_muted"]
                 ];
             }
 
@@ -740,5 +742,34 @@ class ChatController
         $stmt->execute();
 
         Response::json(["status" => true]);
+    }
+
+    public static function muteChat()
+    {
+        $conn = Database::connect();
+        $user = Auth::getUser();
+        $me = $user["user_id"];
+
+        $is_muted = Request::input("is_muted") ?? 0;
+        $chat_id = Request::input("chat_id") ?? 0;
+
+        if (!$chat_id) {
+            Response::json(["status" => false, "message" => "Invalid chat id"]);
+        }
+
+        $sql = "UPDATE chat_participants SET is_muted = ? WHERE chat_id = ? AND user_id = ?";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("iii", $is_muted, $chat_id, $me);
+
+        $stmt->execute();
+
+        $status = $stmt->get_result();
+
+        Response::json([
+            "status" => true,
+            "message" => "Muted"
+        ]);
+
     }
 }

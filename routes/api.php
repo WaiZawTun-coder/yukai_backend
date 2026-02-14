@@ -47,6 +47,13 @@ Router::add(
 
 Router::add(
     "POST",
+    "/auth/logout",
+    fn() => AuthController::logout(),
+    true
+);
+
+Router::add(
+    "POST",
     "/auth/register",
     fn() =>
     AuthController::register(),
@@ -228,7 +235,7 @@ Router::add(
     "/api/create-post",
     fn() =>
     PostController::createPost(),
-    false
+    true
 );
 
 Router::add(
@@ -615,6 +622,13 @@ Router::add(
     true
 );
 
+Router::add(
+    "POST",
+    "/api/chats/mute",
+    fn() => ChatController::muteChat(),
+    true
+);
+
 
 /*
 |--------------------------------------------------------------------------
@@ -748,11 +762,11 @@ Router::add("POST", "/api/search", function () {
 Router::add("POST", "/api/Chatting", function () {
 
     ChatController::createPrivateChat();
-}, false);
+}, true);
 Router::add("POST", "/api/auth/2factors", function () {
 
     ChatController::createPrivateChat();
-}, false);
+}, true);
 Router::add("POST", "/api/auth/2factors", function () {
 
     AuthController::twoFactorAuthentication();
@@ -862,10 +876,10 @@ Router::add(
     fn() =>
     AdminController::forgetPassword(),
     false
- );
- 
- //Admin
- 
+);
+
+//Admin
+
 Router::add(
     "POST",
     "/api/reset_password",
@@ -876,14 +890,14 @@ Router::add(
 Router::add(
     "POST",
     "/api/ban_user",
-    fn()=>
+    fn() =>
     AdminController::banUser(),
     true
 );
 Router::add(
     "POST",
     "/api/ban_post",
-    fn() => 
+    fn() =>
     AdminController::banPost(),
     true
 );

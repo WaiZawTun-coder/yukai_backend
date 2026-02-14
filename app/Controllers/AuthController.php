@@ -21,6 +21,9 @@ require_once __DIR__ . '/../../phpmailer/SMTP.php';
 
 class AuthController
 {
+    const MAX_ATTEMPTS = 5;
+    const LOCK_MINUTES = 15;
+
     public static function index()
     {
         $conn = Database::connect();
@@ -69,7 +72,7 @@ class AuthController
 
         $username = trim($input['username'] ?? '');
         $password = trim($input['password'] ?? '');
-        $device_id = (int) (Request::input("device_id") ?? 0);
+        $device_id = trim(Request::input("device_id") ?? "");
 
         if ($username === '' || $password === '') {
             Response::json(["status" => false, "message" => "Username and Password required"], 400);
@@ -87,6 +90,14 @@ class AuthController
 
         $user = $result->fetch_assoc();
 
+        if ($user["locked_until"] && strtotime($user["locked_until"]) > time()) {
+            Response::json([
+                "status" => false,
+                "message" => "Account locked. Try again later."
+            ]);
+            return;
+        }
+
         if ((int) $user['is_active'] === 0) {
             Response::json(["status" => false, "message" => "Account is not active"], 403);
             return;
@@ -101,6 +112,7 @@ class AuthController
         }
 
         if (!PasswordService::verify($password, $user['password'])) {
+            self::handleFailedAttempt($user);
             Response::json(["status" => false, "message" => "Incorrect password"], 401);
             return;
         }
@@ -134,6 +146,8 @@ class AuthController
                 "two_factor_verified" => false
             ], 300);
 
+
+            self::resetAttempts($user["user_id"]);
             Response::json([
                 "status" => true,
                 "two_factor_required" => true,
@@ -231,6 +245,7 @@ class AuthController
             }
         }
 
+        self::resetAttempts($user["user_id"]);
         Response::json([
             "status" => true,
             "message" => "Login successful",
@@ -253,6 +268,76 @@ class AuthController
         ]);
     }
 
+    private static function handleFailedAttempt($user)
+    {
+        $conn = Database::connect();
+
+        $failed = $user["failed_attempts"] + 1;
+        $lockedUntil = null;
+
+        if ($failed >= self::MAX_ATTEMPTS) {
+            $lockedUntil = date(
+                "Y-m-d H:i:s",
+                time() + (self::LOCK_MINUTES * 60)
+            );
+        }
+
+        $stmt = $conn->prepare("
+            UPDATE users 
+            SET failed_attempts = ?,
+                locked_until = ?,
+                last_failed_at = NOW()
+            WHERE user_id = ?
+        ");
+        $stmt->bind_param("isi", $failed, $lockedUntil, $user["user_id"]);
+
+        $stmt->execute();
+
+        // Progressive delay
+        sleep(min($failed * 2, 10));
+    }
+
+    private static function resetAttempts($userId)
+    {
+        $conn = Database::connect();
+
+        $stmt = $conn->prepare("
+            UPDATE users 
+            SET failed_attempts = 0,
+                locked_until = NULL
+            WHERE user_id = ?
+        ");
+
+        $stmt->bind_param("i", $userId);
+        $stmt->execute();
+    }
+
+    public static function logout()
+    {
+        $user = Auth::getUser();
+        $user_id = $user['user_id'];
+
+        $device_id = Request::input("device_id") ?? "";
+        if (!$device_id) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid Device Id"
+            ], 400);
+            return;
+        }
+
+        $conn = Database::connect();
+        $sql = "UPDATE refresh_tokens SET revoked = 1 WHERE device_id = ? AND user_id = ?";
+        $stmt = $conn->prepare($sql);
+
+        $stmt->bind_param("si", $device_id, $user_id);
+        $stmt->execute();
+
+        Response::json([
+            'status' => true,
+            "message" => "Logged out successful"
+        ]);
+    }
 
     // need to add protect in step 2
     public static function register($username = "")
@@ -634,56 +719,148 @@ class AuthController
 
 
     // Verify OTP
-    public static function verifyOTP($user_id, $otpcode)
+    public static function verifyOTP()
     {
         $conn = Database::connect();
 
+        $userId = (int) Request::input("user_id");
+        $otpCode = trim(Request::input("otp"));
+        $deviceId = Request::input("device_id");
 
-        // Get valid OTPs for this user
+        if (!$userId || !$otpCode || !$deviceId) {
+            Response::json(["error" => "Missing required fields."], 400);
+        }
+
+        // Fetch latest unused OTP
         $stmt = $conn->prepare("
-                SELECT otp_id, otp_code, expiration_time
-                FROM otp
-                WHERE user_id = ? 
-                AND expiration_time > NOW()
-                AND is_used = FALSE
-                ORDER BY created_at DESC
-                LIMIT 1
-            ");
-        $stmt->bind_param("i", $user_id);
+        SELECT id, otp_code, expires_at, attempts
+        FROM otp
+        WHERE user_id = ?
+          AND is_used = 0
+        ORDER BY expires_at DESC
+        LIMIT 1
+    ");
+        $stmt->bind_param("i", $userId);
         $stmt->execute();
         $result = $stmt->get_result();
-
-        if ($result->num_rows === 0) {
-            Response::json([
-                'status' => false,
-                'message' => 'No valid OTP found or OTP has expired'
-            ], 400);
-        }
-
         $otpRecord = $result->fetch_assoc();
-        if (!password_verify($otpcode, $otpRecord['otp_code'])) {
-            Response::json([
-                'status' => false,
-                'message' => 'Invalid OTP code'
-            ], 401);
+
+        if (!$otpRecord) {
+            Response::json(["error" => "Invalid or expired OTP."], 400);
         }
 
-        // Mark OTP as used
-        $updateStmt = $conn->prepare("
-                UPDATE otp 
-                SET is_used = TRUE
-                WHERE otp_id = ?
-            ");
-        $updateStmt->bind_param("i", $otpRecord['otp_id']);
-        $updateStmt->execute();
+        // 🚫 Rate limit check
+        if ($otpRecord['attempts'] >= 5) {
+            Response::json([
+                "error" => "Too many failed attempts. Please request a new OTP."
+            ], 429);
+        }
+
+        // ⏰ Expiration check
+        if (strtotime($otpRecord['expires_at']) < time()) {
+            Response::json(["error" => "OTP has expired."], 400);
+        }
+
+        // ❌ Wrong OTP
+        if (!hash_equals($otpRecord['otp_code'], $otpCode)) {
+
+            // Increment attempts
+            $updateAttempts = $conn->prepare("
+            UPDATE otp 
+            SET attempts = attempts + 1
+            WHERE id = ?
+        ");
+            $updateAttempts->bind_param("i", $otpRecord['id']);
+            $updateAttempts->execute();
+
+            Response::json(["error" => "Invalid OTP."], 400);
+        }
+
+        // ✅ Correct OTP — begin transaction
+        $conn->begin_transaction();
+
+        try {
+
+            // Mark OTP as used
+            $markUsed = $conn->prepare("
+            UPDATE otp 
+            SET is_used = 1 
+            WHERE id = ?
+        ");
+            $markUsed->bind_param("i", $otpRecord['id']);
+            $markUsed->execute();
+
+            // Fetch user info
+            $userStmt = $conn->prepare("
+            SELECT user_id, username, email, role
+            FROM users
+            WHERE user_id = ?
+            LIMIT 1
+        ");
+            $userStmt->bind_param("i", $userId);
+            $userStmt->execute();
+            $userResult = $userStmt->get_result();
+            $user = $userResult->fetch_assoc();
+
+            if (!$user) {
+                throw new Exception("User not found.");
+            }
+
+            // 🔒 Revoke old refresh tokens for this device
+            $revoke = $conn->prepare("
+            UPDATE refresh_tokens
+            SET revoked = 1
+            WHERE user_id = ? AND device_id = ?
+        ");
+            $revoke->bind_param("is", $userId, $deviceId);
+            $revoke->execute();
+
+            // 🔑 Generate tokens
+            $accessToken = JWTHandler::generateAccessToken($user);
+
+            $refreshToken = bin2hex(random_bytes(64));
+            $refreshHash = hash("sha256", $refreshToken);
+
+            $expiresAt = date("Y-m-d H:i:s", time() + (7 * 24 * 60 * 60));
+
+            // Store refresh token
+            $insert = $conn->prepare("
+            INSERT INTO refresh_tokens
+            (user_id, device_id, token_hash, expires_at, revoked)
+            VALUES (?, ?, ?, ?, 0)
+        ");
+            $insert->bind_param("isss", $userId, $deviceId, $refreshHash, $expiresAt);
+            $insert->execute();
+
+            $conn->commit();
+
+        } catch (Exception $e) {
+            $conn->rollback();
+            Response::json(["error" => "OTP verification failed."], 500);
+        }
+
+        // 🍪 Secure cookie settings
+        // $isSecure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+
+        // setcookie(
+        //     "refresh_token",
+        //     $refreshToken,
+        //     [
+        //         "expires"  => time() + (7 * 24 * 60 * 60),
+        //         "path"     => "/",
+        //         "secure"   => $isSecure,
+        //         "httponly" => true,
+        //         "samesite" => "Strict"
+        //     ]
+        // );
 
         // Response::json([
-        //     'status' => true,
-        //     'message' => 'OTP verified successfully'
-        // ]);
+        //     "message" => "OTP verified successfully.",
+        //     "access_token" => $accessToken
+        // ], 200);
         return true;
-
     }
+
 
     public static function sendEmail($email, $otpcode)
     {
@@ -691,7 +868,7 @@ class AuthController
         $body = "Hello,
 
             Dear User,
-            \n\nYour One-Time Password (OTP) for account verification is:\n\n  $otpcode\n\n This OTP is valid for 2 minutes.PLease Do not share this code with anyone.\n\n
+            \n\nYour One-Time Password (OTP) for account verification is:\n\n  $otpcode\n\n This OTP is valid for 5 minutes.PLease Do not share this code with anyone.\n\n
             If you didn't request this code,please ignore this email.\n\n
             Thank you for using our service!\n\n
 
@@ -765,7 +942,7 @@ class AuthController
         if (!$user) {
             Response::json([
                 "status" => false,
-                "message" => "User not found"
+                "message" => "This email is not registered in our system."
             ], 404);
         }
 
@@ -810,7 +987,7 @@ class AuthController
 
         $getUserIdResult = $getUserIdStmt->get_result();
         $user_id = $getUserIdResult->fetch_assoc()["user_id"];
-
+        PasswordService::isStrong($newPassword);
 
         if (!self::verifyOTP($user_id, $otpcode)) {
             Response::json([
@@ -818,11 +995,12 @@ class AuthController
                 "message" => "Invalid or expired OTP"
             ], 401);
         }
-        PasswordService::isStrong($newPassword);
+
         $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
         $stmt = $conn->prepare("UPDATE users SET password = ? WHERE user_id = ?");
         $stmt->bind_param("si", $hashedPassword, $user_id);
         $stmt->execute();
+
 
         Response::json([
             "status" => true,
@@ -877,17 +1055,6 @@ class AuthController
 
         $refreshPayload = TokenService::generateRefreshToken();
         $refreshToken = $refreshPayload["token"];
-        $refreshHash = $refreshPayload["hash"];
-
-        $expireAt = date("Y-m-d H:i:s", time() + 604800);
-
-        $update = $conn->prepare("
-                UPDATE users 
-                SET refresh_token = ?, refresh_token_expire_time = ?
-                WHERE user_id = ?
-            ");
-        $update->bind_param("ssi", $refreshHash, $expireAt, $user["user_id"]);
-        $update->execute();
 
         setcookie("refresh_token", $refreshToken, [
             "expires" => time() + 604800,

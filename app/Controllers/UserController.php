@@ -67,8 +67,8 @@ class UserController
             (
                 SELECT COUNT(*) 
                 FROM friends fr
-                WHERE fr.user_1_id = u.user_id
-                   OR fr.user_2_id = u.user_id
+                WHERE (fr.user_1_id = u.user_id
+                   OR fr.user_2_id = u.user_id) AND fr.status = 'accepted'
             ) AS friends_count,
 
             -- friend status (NULL if own profile)
@@ -175,7 +175,9 @@ class UserController
     public static function editUser()
     {
         $conn = Database::connect();
-        $user_id = (int) (Request::input("user_id") ?? 0);
+        $user = Auth::getUser();
+        $user_id = $user["user_id"];
+
         $display_name = trim(Request::input("display_name") ?? "");
         $email = trim(Request::input("email") ?? "");
         $password = trim(Request::input('password') ?? "");
@@ -218,9 +220,9 @@ class UserController
             EmailService::validate($email);
             if ($email !== $user['email']) {
                 // Check if new email already exists for another admin
-                $checkEmailSql = "SELECT admin_id FROM admin WHERE email = ? AND admin_id != ?";
+                $checkEmailSql = "SELECT user_id FROM users WHERE email = ? AND user_id != ?";
                 $checkStmt = $conn->prepare($checkEmailSql);
-                $checkStmt->bind_param("si", $email, $admin_id);
+                $checkStmt->bind_param("si", $email, $user_id);
                 $checkStmt->execute();
                 $emailResult = $checkStmt->get_result();
 
@@ -231,6 +233,9 @@ class UserController
                     ]);
 
                 }
+                $updates[] = "email = ?";
+                $params[] = $email;
+                $types .= "s";
             }
         }
         if (!empty($password)) {
@@ -413,7 +418,7 @@ class UserController
                 Response::json([
                     "status" => false,
                     "message" => "Current password is incorrect"
-                ], 401);
+                ], 400);
                 return;
             }
         }

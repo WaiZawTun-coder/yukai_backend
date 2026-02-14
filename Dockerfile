@@ -1,15 +1,20 @@
 FROM php:8.2-apache
 
+# Enable Apache modules
 RUN a2enmod rewrite
-RUN docker-php-ext-install mysqli pdo pdo_mysql
 
-ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
+# Install required PHP extensions
+RUN apt-get update && apt-get install -y \
+    libcurl4-openssl-dev \
+ && docker-php-ext-install curl pdo_mysql mysqli
 
-RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' \
-    /etc/apache2/sites-available/*.conf \
-    /etc/apache2/apache2.conf
-
+# Copy project files
 COPY . /var/www/html/
+
+# Set permissions
 RUN chown -R www-data:www-data /var/www/html
 
-EXPOSE 80
+# Change Apache to use Railway PORT at runtime
+CMD sed -i "s/80/${PORT}/g" /etc/apache2/ports.conf \
+ && sed -i "s/:80/:${PORT}/g" /etc/apache2/sites-enabled/000-default.conf \
+ && apache2-foreground

@@ -308,44 +308,63 @@ class FriendController
     public static function getFriendRequest()
     {
         $conn = Database::connect();
-        $input = Request::json();
-        // $sender_id = (int) ($input['user_1_id'] ?? 0);
-
         $user = Auth::getUser();
         $sender_id = $user["user_id"];
 
-        $friendRequentList =
-            "SELECT f.user_2_id as requsted_user_id,
-                u.display_name,
-                u.profile_image,
-                u.cover_image,
-                f.created_at
-                FROM friends f
-                JOIN users u ON f.user_2_id = u.user_id
-                WHERE f.user_1_id =? 
-                AND f.status='pending'
-                ORDER BY f.created_at DESC";
-        $getRequest = $conn->prepare($friendRequentList);
-        $getRequest->bind_param("i", $sender_id);
-        $getRequest->execute();
-        $getResultList = $getRequest->get_result();
-        $posts = [];
-        while ($row["creator"] = $getResultList->fetch_assoc()) {
-            // $row["creator"]=[
-            //     "id"=>$row["user_id"],
-            //     "display_name"=>$row["display_name"],
-            //     "profile_image"=>$row["profile_image"]
-            // ];
-            $posts[] = $row;
+        // Get pagination parameters
+        [$page, $limit, $offset] = self::getPageParams();
+
+        /* ---------- COUNT ---------- */
+        $countSql = "
+        SELECT COUNT(*) AS total
+        FROM friends
+        WHERE user_1_id = ?
+        AND status = 'pending'
+    ";
+
+        $countStmt = $conn->prepare($countSql);
+        $countStmt->bind_param("i", $sender_id);
+        $countStmt->execute();
+        $total = (int) $countStmt->get_result()->fetch_assoc()['total'];
+        $total_pages = ceil($total / $limit);
+
+        /* ---------- DATA ---------- */
+        $sql = "
+        SELECT 
+            f.user_2_id AS user_id,
+            u.display_name,
+            u.username,
+            u.profile_image,
+            u.gender,
+            f.created_at
+        FROM friends f
+        JOIN users u ON u.user_id = f.user_2_id
+        WHERE f.user_1_id = ?
+        AND f.status = 'pending'
+        ORDER BY f.created_at DESC
+        LIMIT ? OFFSET ?
+    ";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("iii", $sender_id, $limit, $offset);
+        $stmt->execute();
+
+        $result = $stmt->get_result();
+        $requests = [];
+
+        while ($row = $result->fetch_assoc()) {
+            $requests[] = $row;
         }
 
         Response::json([
             "status" => true,
-            "message" => "Get Friend Request List",
-            "data" => array_values($posts)
+            "page" => $page,
+            "total_pages" => $total_pages,
+            "total" => $total,
+            "data" => $requests
         ]);
-
     }
+
     public static function getReceivedRequests()
     {
         $conn = Database::connect();
