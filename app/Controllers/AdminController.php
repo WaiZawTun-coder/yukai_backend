@@ -112,10 +112,11 @@ class AdminController
                 ad.display_name,
                 ad.email,
                 ad.profile_image,
-                ad.role
+                ad.role,
+                ad.admin_id,
+                ad.is_active
 
                 FROM admin ad
-                ORDER BY ad.created_at DESC
                 LIMIT ? OFFSET ?"
         );
 
@@ -147,7 +148,8 @@ class AdminController
     public static function banAdmin()
     {
         $conn = Database::connect();
-        $super_admin_id = (int) (Request::input("super_admin_id") ?? 0); // login super admin 
+        $admin = AdminAuth::admin();
+        $super_admin_id = $admin["admin_id"];
         $banned_admin_id = (int) (Request::input("banned_admin_id") ?? 0);
 
         if ($super_admin_id <= 0 || $banned_admin_id <= 0) {
@@ -161,7 +163,7 @@ class AdminController
         if ($super_admin_id === $banned_admin_id) {
             Response::json([
                 "status" => false,
-                "message" => "Super admin cannot be banned himself"
+                "message" => "Admin cannot ban own account"
             ]);
             return;
         }
@@ -173,7 +175,7 @@ class AdminController
         if ($result->num_rows === 0) {
             Response::json([
                 "status" => false,
-                "message" => "You are not Super Admin "
+                "message" => "Only super admin can ban other admins"
             ]);
             return;
         }
@@ -195,20 +197,71 @@ class AdminController
                 "message" => " Admin Account cannot be banned "
             ]);
         }
-
-
     }
+
+    public static function unbanAdmin()
+    {
+        $conn = Database::connect();
+        $admin = AdminAuth::admin();
+        $super_admin_id = $admin["admin_id"];
+        $banned_admin_id = (int) (Request::input("banned_admin_id") ?? 0);
+
+        if ($super_admin_id <= 0 || $banned_admin_id <= 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid ID"
+            ]);
+            return;
+        }
+        // super admin cannot ban himself
+        if ($super_admin_id === $banned_admin_id) {
+            Response::json([
+                "status" => false,
+                "message" => "Super admin cannot be unbanned himself"
+            ]);
+            return;
+        }
+
+        $stmt = $conn->prepare("SELECT * FROM admin WHERE admin_id=? and role='super_admin' and is_active=1");
+        $stmt->bind_param("i", $super_admin_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        if ($result->num_rows === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Only super admin can ban or unban other admins"
+            ]);
+            return;
+        }
+
+        // ban admin 
+
+        $update = $conn->prepare("UPDATE admin SET is_active = 1 WHERE admin_id=? ");
+        $update->bind_param("i", $banned_admin_id);
+
+        if ($update->execute()) {
+            Response::json([
+                "status" => true,
+                "message" => "Unbanned Successfully"
+            ]);
+            return;
+        } else {
+            Response::json([
+                "status" => false,
+                "message" => " Admin Account cannot be banned "
+            ]);
+        }
+    }
+
+
     public static function AdminRegister()
     {
         $conn = Database::connect();
         $input = Request::json();
-        $displayUsername = trim($input['username'] ?? '');
-
-    
+        $displayUsername = trim($input['displayName'] ?? '');
         $email = trim($input['email'] ?? '');
 
         $creator = AdminAuth::admin();
-        print_r($creator);
 
         if (!$creator) {
             return Response::json([
@@ -254,22 +307,28 @@ class AdminController
             $super_admin_id
         );
 
-
         $stmt->execute();
+        $result = $stmt->get_result();
+        $admin_id = $conn->insert_id;
+
         Response::json([
             "status" => true,
             "message" => "Admin created successfully.Password has not set yet",
             "created by" => $creator_role,
             "data" => [
+                "admin_id" => $admin_id,
                 "username" => $generatedUsername,
                 "display_name" => $displayUsername,
-                "email" => $email
+                "email" => $email,
+                "role" => "admin",
+                "is_active" => 1
             ]
         ], 201);
 
     }
 
-    public static function AdminLogin(){
+    public static function AdminLogin()
+    {
         $conn = Database::connect();
         $input = Request::json();
 
@@ -317,7 +376,7 @@ class AdminController
             ]);
 
         }
-     
+
 
         // //password verify
         if (!PasswordService::verify($password, $user['password'])) {
@@ -336,7 +395,7 @@ class AdminController
             return;
         }
 
-     
+
 
         $accessToken = TokenService::generateAccessToken([
             "admin_id" => $user['admin_id'],
@@ -345,6 +404,30 @@ class AdminController
 
         ]);
 
+        $isSecure =
+            (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
+
+        $refreshPayload = TokenService::generateRefreshToken();
+        $refreshToken = $refreshPayload["token"];
+        $refreshHash = $refreshPayload["hash"];
+        $refreshExpire = date("Y-m-d H:i:s", time() + 604800); // 7 days
+
+        $stmt = $conn->prepare("
+            INSERT INTO admin_refresh_tokens(admin_id, refresh_token, expires_at)
+            VALUES (?, ?, ?)
+        ");
+
+        $stmt->bind_param("iss", $user["admin_id"], $refreshHash, $refreshExpire);
+        $stmt->execute();
+
+        setcookie("refresh_token", $refreshToken, [
+            "expires" => time() + 604800, // 7 days
+            "path" => "/",
+            "secure" => $isSecure,
+            "httponly" => true,
+            "samesite" => $isSecure ? "None" : "Lax"
+        ]);
 
         Response::json([
             "status" => true,
@@ -352,18 +435,18 @@ class AdminController
             "data" => [
 
                 // "admin_user_id"      => $user["user_id"],
-                "username"     => $user["username"],
-                "email"        => $user["email"],
-                "role"         =>$user['role'],
+                "username" => $user["username"],
+                "email" => $user["email"],
+                "role" => $user['role'],
                 "display_name" => $user["display_name"],
-                "is_active"    => $user["is_active"],
-                "last_seen"    => $user["last_seen"],
+                "is_active" => $user["is_active"],
+                "last_seen" => $user["last_seen"],
                 "access_token" => $accessToken,
-               
+
             ]
         ]);
     }
-      
+
 
     public static function generateOTP($admin_id)
     {
@@ -602,126 +685,189 @@ class AdminController
         ]);
     }
     //banned user
-    public static function banUser(){
-        $conn=Database::connect();
-        $input=Request::json();
-        $user_id=(int)($input['user_id']?? 0);
+    public static function banUser()
+    {
+        $conn = Database::connect();
+        $input = Request::json();
+        $user_id = (int) ($input['user_id'] ?? 0);
         $admin = AdminAuth::admin();
         error_log("Admin data: " . print_r($admin, true));
 
         if (!$admin) {
-        Response::json([
-            "status" => false,
-            "message" => "Unauthorized"
-        ]);
-        return;
-       
+            Response::json([
+                "status" => false,
+                "message" => "Unauthorized"
+            ]);
+            return;
+
         }
 
-    // Allow only admin or super_admin
-    if (!in_array($admin['role'], ['admin', 'super_admin'])) {
+        // Allow only admin or super_admin
+        if (!in_array($admin['role'], ['admin', 'super_admin'])) {
+            Response::json([
+                "status" => false,
+                "message" => "Forbidden: Only admin or super admin can ban users"
+            ]);
+            return;
+
+        }
+
+        if ($user_id <= 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid user ID"
+            ]);
+        }
+        $userSql = "SELECT user_id, is_active from users where user_id=?";
+        $userStmt = $conn->prepare($userSql);
+        $userStmt->bind_param("i", $user_id);
+        $userStmt->execute();
+        $user = $userStmt->get_result()->fetch_assoc();
+        if (!$user) {
+            Response::json([
+                "status" => false,
+                "message" => "user does not exist"
+            ]);
+        }
+        if ((int) $user['is_active'] === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "This user is aleady banned"
+            ]);
+        }
+        $updateBanUserSql = "UPDATE users set is_active=0 WHERE user_id=?";
+        $updateBanUser = $conn->prepare($updateBanUserSql);
+        $updateBanUser->bind_param("i", $user_id);
+        $updateBanUser->execute();
         Response::json([
-            "status" => false,
-            "message" => "Forbidden: Only admin or super admin can ban users"
+            "status" => true,
+            "message" => "ban user successfully",
+            "role" => $admin
         ]);
-        return;
-       
+
     }
-
-        if($user_id<=0){
-            Response::json([
-                "status"=>false,
-                "message"=>"Invalid user ID"
-            ]);
-        }
-        $userSql="SELECT user_id ,is_banned from users where user_id=?";
-        $userStmt   =$conn->prepare($userSql);
-        $userStmt  ->bind_param("i",$user_id);
-        $userStmt   ->execute();
-        $user =$userStmt->get_result()->fetch_assoc();
-        if(!$user){
-            Response::json([
-                "status"=>false,
-                "message"=>"user does not exist"
-            ]);
-        }
-        if((int)$user['is_banned']===1){
-            Response::json([
-                "status"=>false,
-                "message"=>"This user is aleady banned"    
-            ]);
-        }
-        $updateBanUserSql="UPDATE users set is_banned=1, is_active=0 WHERE user_id=?";
-        $updateBanUser   =$conn->prepare($updateBanUserSql);
-        $updateBanUser   ->bind_param("i",$user_id);
-        $updateBanUser   ->execute();
-        Response::json([
-            "status"=>true,
-            "message"=>"ban user successfully",
-            "role"=>$admin
-        ]);
-
-    }
-    public static function banPost(){
-        $conn=Database::connect();
-        $input=Request::json();
-        $post_id=(int)($input['post_id']?? 0);
+    public static function banPost()
+    {
+        $conn = Database::connect();
+        $input = Request::json();
+        $post_id = (int) ($input['post_id'] ?? 0);
         $admin = AdminAuth::admin();
         error_log("Admin data: " . print_r($admin, true));
 
         if (!$admin) {
-        Response::json([
-            "status" => false,
-            "message" => "Unauthorized"
-        ]);
-        return;
-       
+            Response::json([
+                "status" => false,
+                "message" => "Unauthorized"
+            ]);
+            return;
+
         }
 
-    // Allow only admin or super_admin
-    if (!in_array($admin['role'], ['admin', 'super_admin'])) {
+        // Allow only admin or super_admin
+        if (!in_array($admin['role'], ['admin', 'super_admin'])) {
+            Response::json([
+                "status" => false,
+                "message" => "Forbidden: Only admin or super admin can ban users"
+            ]);
+            return;
+
+        }
+
+        if ($post_id <= 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid post"
+            ]);
+        }
+        $postSql = "SELECT post_id, is_banned from posts where post_id=?";
+        $poststmt = $conn->prepare($postSql);
+        $poststmt->bind_param("i", $post_id);
+        $poststmt->execute();
+        $post = $poststmt->get_result()->fetch_assoc();
+        if (!$post) {
+            Response::json([
+                "status" => false,
+                "message" => "post does not exist"
+            ]);
+        }
+        if ((int) $post['is_banned'] === 1) {
+            Response::json([
+                "status" => false,
+                "message" => "this post is already banned"
+            ]);
+        }
+        $postBanSql = "UPDATE posts SET is_banned=1 WHERE post_id=?";
+        $postBan = $conn->prepare($postBanSql);
+        $postBan->bind_param("i", $post_id);
+        $postBan->execute();
         Response::json([
-            "status" => false,
-            "message" => "Forbidden: Only admin or super admin can ban users"
-        ]);
-        return;
-       
-    }
-        
-       if($post_id<=0){
-        Response::json([
-            "status"=>false,
-            "message"=>"Invalid post"
-        ]);
-    }
-    $postSql="SELECT post_id, is_banned from posts where post_id=?";
-    $poststmt  =$conn->prepare($postSql);
-    $poststmt   ->bind_param("i",$post_id);
-    $poststmt   ->execute();
-    $post=$poststmt->get_result()->fetch_assoc();
-    if(!$post){
-        Response::json([
-            "status"=>false,
-            "message"=>"post does not exist"
-        ]);
-    }
-    if((int)$post['is_banned']===1){
-        Response::json([
-            "status"=>false,
-            "message"=>"this post is already banned"
-        ]);
-    }
-    $postBanSql="UPDATE posts SET is_banned=1 WHERE post_id=?";
-    $postBan   =$conn->prepare($postBanSql);
-    $postBan   ->bind_param("i",$post_id);
-    $postBan   ->execute();
-     Response::json([
-            "status"=>true,
-            "message"=>"ban post successfully",
-            "role"=>$admin
+            "status" => true,
+            "message" => "ban post successfully",
+            "role" => $admin
         ]);
 
     }
+
+    public static function unbanPost(){
+        $conn = Database::connect();
+        $input = Request::json();
+        $post_id = (int) ($input['post_id'] ?? 0);
+        $admin = AdminAuth::admin();
+        error_log("Admin data: " . print_r($admin, true));
+
+        if (!$admin) {
+            Response::json([
+                "status" => false,
+                "message" => "Unauthorized"
+            ]);
+            return;
+
+        }
+
+        // Allow only admin or super_admin
+        if (!in_array($admin['role'], ['admin', 'super_admin'])) {
+            Response::json([
+                "status" => false,
+                "message" => "Forbidden: Only admin or super admin can unban posts"
+            ]);
+            return;
+
+        }
+
+        if ($post_id <= 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Invalid post"
+            ]);
+        }
+        $postSql = "SELECT post_id, is_banned from posts where post_id=?";
+        $poststmt = $conn->prepare($postSql);
+        $poststmt->bind_param("i", $post_id);
+        $poststmt->execute();
+        $post = $poststmt->get_result()->fetch_assoc();
+        if (!$post) {
+            Response::json([
+                "status" => false,
+                "message" => "post does not exist"
+            ]);
+        }
+        if ((int) $post['is_banned'] === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "this post is not banned"
+            ]);
+        }
+        $postUnbanSql = "UPDATE posts SET is_banned=0 WHERE post_id=?";
+        $postUnban = $conn->prepare($postUnbanSql);
+        $postUnban->bind_param("i", $post_id);
+        $postUnban->execute();
+        Response::json([
+            "status" => true,
+            "message" => "unban post successfully",
+            "role" => $admin
+        ]);
+    }
+
     //user profile edit
     public static function editAdminProfile()
     {
@@ -740,7 +886,7 @@ class AdminController
         $display_name = trim(Request::input("display_name") ?? "");
         $email = trim(Request::input("email") ?? "");
         $profile_image = trim(Request::input("profile_image") ?? "");
-        $password  =trim(Request::input('password')?? "");
+        $password = trim(Request::input('password') ?? "");
         //Authorization::Only admins can only edit their own profile
         // if($current_admin['admin_id']!==$admin_id){
         //     Response::json([
@@ -748,7 +894,7 @@ class AdminController
         //         "message"=>"You can only edit your own profile"
         //     ]);
         // }
-       
+
         // Check admin exists
         $sql = "SELECT * FROM admin WHERE admin_id = ?";
         $stmt = $conn->prepare($sql);
@@ -763,7 +909,7 @@ class AdminController
             ], 404);
             return;
         }
-      
+
 
         $admin = $result->fetch_assoc();
         $updates = $updates ?? [];
@@ -777,64 +923,64 @@ class AdminController
 
         if (!empty($display_name)) {
             $current_display_name = trim($admin['display_name'] ?? '');
-        
-        if (strtolower($display_name) !== strtolower($current_display_name)) {
-            // Display name is changing, check if new one already exists
-            $checkDisplayNameSql = "SELECT admin_id FROM admin WHERE LOWER(display_name) = ? AND admin_id != ?";
-            $checkStmt = $conn->prepare($checkDisplayNameSql);
-            $normalized_display_name = strtolower($display_name);
-            $checkStmt->bind_param("si", $normalized_display_name, $admin_id);
-            $checkStmt->execute();
-            
-            if ($checkStmt->get_result()->num_rows > 0) {
-                Response::json([
-                    "status" => false,
-                    "message" => "Display name already exists"
-                ], 400);
-                return;
+
+            if (strtolower($display_name) !== strtolower($current_display_name)) {
+                // Display name is changing, check if new one already exists
+                $checkDisplayNameSql = "SELECT admin_id FROM admin WHERE LOWER(display_name) = ? AND admin_id != ?";
+                $checkStmt = $conn->prepare($checkDisplayNameSql);
+                $normalized_display_name = strtolower($display_name);
+                $checkStmt->bind_param("si", $normalized_display_name, $admin_id);
+                $checkStmt->execute();
+
+                if ($checkStmt->get_result()->num_rows > 0) {
+                    Response::json([
+                        "status" => false,
+                        "message" => "Display name already exists"
+                    ], 400);
+                    return;
+                }
             }
-        }
             $updates[] = "display_name = ?";
             $params[] = $display_name;
             $types .= "s";
         }
         if (!empty($email)) {
             EmailService::validate($email);
-             if ($email !== $admin['email']) {
-            // Check if new email already exists for another admin
-            $checkEmailSql = "SELECT admin_id FROM admin WHERE email = ? AND admin_id != ?";
-            $checkStmt = $conn->prepare($checkEmailSql);
-            $checkStmt->bind_param("si", $email, $admin_id);
-            $checkStmt->execute();
-            $emailResult = $checkStmt->get_result();
-            
-            if ($emailResult->num_rows > 0) {
-                Response::json([
-                    "status" => false,
-                    "message" => "Email already exists"
-                ], 400);
-                
+            if ($email !== $admin['email']) {
+                // Check if new email already exists for another admin
+                $checkEmailSql = "SELECT admin_id FROM admin WHERE email = ? AND admin_id != ?";
+                $checkStmt = $conn->prepare($checkEmailSql);
+                $checkStmt->bind_param("si", $email, $admin_id);
+                $checkStmt->execute();
+                $emailResult = $checkStmt->get_result();
+
+                if ($emailResult->num_rows > 0) {
+                    Response::json([
+                        "status" => false,
+                        "message" => "Email already exists"
+                    ], 400);
+
+                }
             }
-        }
             $updates[] = "email = ?";
             $params[] = $email;
             $types .= "s";
         }
-        if(!empty($password)){
+        if (!empty($password)) {
             PasswordService::isStrong($password);
             $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
-            $updates[]="password = ?";
-            $params[]=$hashedPassword;
-            $types .="s";
+            $updates[] = "password = ?";
+            $params[] = $hashedPassword;
+            $types .= "s";
         }
-        
+
         if (!empty($profile_image)) {
             $updates[] = "profile_image = ?";
             $params[] = $profile_image;
             $types .= "s";
         }
-        
-       
+
+
 
 
         // Nothing to update
@@ -845,7 +991,7 @@ class AdminController
             ], 400);
             return;
         }
-       
+
 
 
         $params[] = $admin_id;
@@ -870,5 +1016,572 @@ class AdminController
         }
     }
 
+    public static function refresh()
+    {
+        $conn = Database::connect();
+
+        $isSecure =
+            (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
+
+        $refreshToken = $_COOKIE["refresh_token"] ?? null;
+
+        if (!$refreshToken) {
+            Response::json([
+                "status" => false,
+                "message" => "Refresh token missing"
+            ], 401);
+            return;
+        }
+
+        $refreshHash = hash("sha256", $refreshToken);
+
+        $stmt = $conn->prepare("SELECT art.token_id, art.admin_id, art.expires_at, a.username, a.role FROM admin_refresh_tokens art JOIN admin a ON a.admin_id = art.admin_id WHERE art.refresh_token = ? AND art.revoked = 0 LIMIT 1
+        ");
+
+        $stmt->bind_param("s", $refreshHash);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        if ($result->num_rows == 0) {
+            // Invalid token
+            setcookie("refresh_token", "", [
+                "expires" => time() - 3600,
+                "path" => "/",
+                "secure" => $isSecure,
+                "httponly" => true,
+                "samesite" => $isSecure ? "None" : "Lax"
+            ]);
+
+            Response::json([
+                "status" => false,
+                "message" => "Invalid refresh token"
+            ], 401);
+        }
+
+        $tokenData = $result->fetch_assoc();
+
+        $checkAdminSql = "SELECT is_active FROM admin WHERE admin_id = ?";
+        $stmt = $conn->prepare($checkAdminSql);
+        $stmt->bind_param("i", $tokenData['admin_id']);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $is_active = $result->fetch_assoc()["is_active"];
+
+        if ($is_active == 0) {
+            Response::json([
+                "status" => false,
+                "message" => "This admin is banned"
+            ], 400);
+        }
+
+
+        if (strtotime($tokenData["expires_at"]) < time()) {
+            $stmt = $conn->prepare("UPDATE admin_refresh_tokens SET revoked = 1 WHERE token_id = ?");
+            $stmt->bind_param("i", $tokenData["token_id"]);
+            $stmt->execute();
+
+            setcookie("refresh_token", "", [
+                "expires" => time() - 3600,
+                "path" => "/",
+                "secure" => $isSecure,
+                "httponly" => true,
+                "samesite" => $isSecure ? "None" : "Lax"
+            ]);
+
+            Response::json([
+                "status" => false,
+                "message" => "Refresh token expired"
+            ], 401);
+        }
+
+        $refreshPayload = TokenService::generateRefreshToken();
+        $newRefreshToken = $refreshPayload["token"];
+        $newRefreshHash = $refreshPayload["hash"];
+        $newExpire = date("Y-m-d H:i:s", time() + 604800);
+
+        $stmt = $conn->prepare("INSERT INTO admin_refresh_tokens(admin_id, refresh_token, expires_at) VALUES (?, ?, ?)
+        ");
+
+        $stmt->bind_param("iss", $tokenData["admin_id"], $newRefreshHash, $newExpire);
+        $stmt->execute();
+
+        $stmt = $conn->prepare("UPDATE admin_refresh_tokens SET revoked = 1 WHERE token_id = ?");
+        $stmt->bind_param("i", $tokenData["token_id"]);
+        $stmt->execute();
+
+        setcookie("refresh_token", $newRefreshToken, [
+            "expires" => time() + 604800,
+            "path" => "/",
+            "secure" => $isSecure,
+            "httponly" => true,
+            "samesite" => $isSecure ? "None" : "Lax"
+        ]);
+
+        $accessToken = TokenService::generateAccessToken([
+            "admin_id" => $tokenData["admin_id"],
+            "username" => $tokenData["username"],
+            "role" => $tokenData["role"]
+        ]);
+
+        Response::json([
+            "status" => true,
+            "message" => "Token refreshed",
+            "data" => [
+                "access_token" => $accessToken
+            ]
+        ]);
+    }
+
+    public static function getProfile()
+    {
+        $conn = Database::connect();
+        $admin = AdminAuth::admin();
+        $adminId = $admin["admin_id"];
+
+
+        // Fetch admin data
+        $stmt = $conn->prepare("
+        SELECT admin_id, username, email, display_name, role, is_active, last_seen
+        FROM admin
+        WHERE admin_id = ?
+        LIMIT 1
+    ");
+
+        $stmt->bind_param("i", $adminId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        if ($result->num_rows === 0) {
+            Response::json([
+                "status" => false,
+                "message" => "Admin not found"
+            ], 404);
+            return;
+        }
+
+        $user = $result->fetch_assoc();
+
+        Response::json([
+            "status" => true,
+            "message" => "Profile fetched",
+            "data" => $user
+        ]);
+    }
+
+    public static function logout()
+    {
+        $conn = Database::connect();
+
+        $admin = AdminAuth::admin();
+        $admin_id = $admin["admin_id"];
+
+        $sql = "UPDATE admin_refresh_tokens SET revoked = 1 WHERE admin_id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $admin_id);
+        $stmt->execute();
+
+
+        Response::json([
+            "status" => true,
+            "message" => "Logged out successful"
+        ]);
+    }
+
+    public static function getUsers()
+    {
+        $conn = Database::connect();
+
+        $admin = AdminAuth::admin();
+        $admin_id = $admin["admin_id"];
+
+        if (!$admin_id) {
+            Response::json([
+                "status" => false,
+                "message" => "Not authorized"
+            ], 400);
+            return;
+        }
+
+        // Get pagination params
+        [$page, $limit, $offset] = self::getPageParams();
+
+        // Get search param from query string (optional)
+        $search = isset($_GET['search']) ? trim($_GET['search']) : '';
+
+        // Base SQL
+        $sql = "SELECT user_id, username, display_name, gender, profile_image, is_active, status FROM users";
+        $params = [];
+        $types = "";
+
+        // Add search filter if provided
+        if ($search !== '') {
+            $sql .= " WHERE username LIKE ? OR display_name LIKE ? OR CAST(user_id AS CHAR) LIKE ?";
+            $searchTerm = "%{$search}%";
+            $params = [$searchTerm, $searchTerm, $searchTerm];
+            $types = "sss"; // all string types
+        }
+
+        // Add LIMIT/OFFSET
+        $sql .= " LIMIT ? OFFSET ?";
+        $params[] = $limit;
+        $params[] = $offset;
+        $types .= "ii"; // integer types for limit/offset
+
+        $stmt = $conn->prepare($sql);
+
+        // Bind parameters dynamically
+        $stmt->bind_param($types, ...$params);
+
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $users = [];
+        while ($row = $result->fetch_assoc()) {
+            $users[] = [
+                "user_id" => $row["user_id"],
+                "username" => $row["username"],
+                "display_name" => $row["display_name"],
+                "gender" => $row["gender"],
+                "profile_image" => $row["profile_image"],
+                "is_active" => $row["is_active"],
+                "status" => $row["status"]
+            ];
+        }
+
+        // Get total count (for pagination)
+        $countSql = "SELECT COUNT(*) as total_user FROM users";
+        if ($search !== '') {
+            $countSql .= " WHERE username LIKE ? OR display_name LIKE ? OR CAST(user_id AS CHAR) LIKE ?";
+            $stmtCount = $conn->prepare($countSql);
+            $stmtCount->bind_param("sss", $searchTerm, $searchTerm, $searchTerm);
+        } else {
+            $stmtCount = $conn->prepare($countSql);
+        }
+        $stmtCount->execute();
+        $resultCount = $stmtCount->get_result();
+        $count = $resultCount->fetch_assoc()["total_user"];
+
+        Response::json([
+            "status" => true,
+            "page" => $page,
+            "total_pages" => ceil($count / $limit),
+            "data" => $users,
+            "limit" => $limit
+        ]);
+    }
+
+    public static function unbanUser(){
+        $conn = Database::connect();
+        $user_id = (int) (Request::input("user_id") ?? 0);
+        $admin = AdminAuth::admin();
+        if(!$admin){
+            Response::json([
+                "status" => false, 
+                "message" => "Unauthorized"
+            ]);
+        }
+
+        if($user_id <= 0){
+            Response::json([
+                "status" => false,
+                "message" => "Invalid user ID"
+            ], 400);
+        }
+
+        $admin_id = $admin["admin_id"];
+
+        $sql = "UPDATE users SET is_active = 1 WHERE user_id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $user_id);
+
+        if($stmt->execute()){
+            Response::json([
+                "status" => true,
+                "message" => "Unbanned successfully"
+            ]);
+        }else{
+            Response::json([
+                "status" => false,
+                "message" => "Failed to unban user"
+            ], 500);
+        }
+    }
+
+    public static function warnUser(){
+        $conn = Database::connect();
+        $user_id = (int) (Request::input("user_id") ?? 0);
+        $admin = AdminAuth::admin();
+        if(!$admin){
+            Response::json([
+                "status" => false, 
+                "message" => "Unauthorized"
+            ]);
+        }
+
+        if($user_id <= 0){
+            Response::json([
+                "status" => false,
+                "message" => "Invalid user ID"
+            ], 400);
+        }
+
+        $admin_id = $admin["admin_id"];
+
+        $sql = "UPDATE users SET status = 'warn_user' WHERE user_id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $user_id);
+
+        if($stmt->execute()){
+            Response::json([
+                "status" => true,
+                "message" => "Warned user successfully"
+            ]);
+        }else{
+            Response::json([
+                "status" => false,
+                "message" => "Failed to warn user"
+            ], 500);
+        }
+    }
+
+    public static function removeWarnUser(){
+        $conn = Database::connect();
+        $user_id = (int) (Request::input("user_id") ?? 0);
+        $admin = AdminAuth::admin();
+        if(!$admin){
+            Response::json([
+                "status" => false,
+                "message" => "Unauthorized"
+            ], 401);
+            return;
+        }
+
+        if($user_id <= 0){
+            Response::json([
+                "status" => false,
+                "message" => "Invalid user ID"
+            ], 400);
+        }
+
+        $admin_id = $admin["admin_id"];
+
+        $sql = "UPDATE users SET status = 'healthy' WHERE user_id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $user_id);
+        
+        if($stmt->execute()){
+            Response::json([
+                "status" => true,
+                "message" => "Unwarned user successfully"
+            ]);
+        }else{
+            Response::json([
+                "status" => false,
+                "message" => "Failed to unwarn user"
+            ], 500);
+        }
+    }
+
+    public static function suspendUser(){
+        $conn = Database::connect();
+        $user_id = (int) (Request::input("user_id") ?? 0);
+        $admin = AdminAuth::admin();
+        if(!$admin){
+            Response::json([
+                "status" => false,
+                "message" => "Unauthorized"
+            ], 401);
+            return;
+        }
+
+        if($user_id <= 0){
+            Response::json([
+                "status" => false,
+                "message" => "Invalid user ID"
+            ], 400);
+        }
+
+        $admin_id = $admin["admin_id"];
+
+        $sql = "UPDATE users SET status = 'suspend_user' WHERE user_id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $user_id);
+        
+        if($stmt->execute()){
+            Response::json([
+                "status" => true,
+                "message" => "Suspended user successfully"
+            ]);
+        }else{
+            Response::json([
+                "status" => false,
+                "message" => "Failed to suspend user"
+            ], 500);
+        }
+    }
+
+    public static function unsuspendUser(){
+        $conn = Database::connect();
+        $user_id = (int) (Request::input("user_id") ?? 0);
+        $admin = AdminAuth::admin();
+        if(!$admin){
+            Response::json([
+                "status" => false,
+                "message" => "Unauthorized"
+            ], 401);
+            return;
+        }
+
+        if($user_id <= 0){
+            Response::json([
+                "status" => false,
+                "message" => "Invalid user ID"
+            ], 400);
+        }
+
+        $admin_id = $admin["admin_id"];
+
+        $sql = "UPDATE users SET status = 'healthy' WHERE user_id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $user_id);
+        
+        if($stmt->execute()){
+            Response::json([
+                "status" => true,
+                "message" => "Unsuspended user successfully"
+            ]);
+        }else{
+            Response::json([
+                "status" => false,
+                "message" => "Failed to unsuspend user"
+            ], 500);
+        }
+    }
+
+    public static function getReportedPosts(){
+        $conn = Database::connect();
+        $admin = AdminAuth::admin();
+
+        if(!$admin){
+            Response::json([
+                "status" => false,
+                "message" => "Unauthorized"
+            ], 401);
+            return;
+        }
+
+        // Get pagination params
+        [$page, $limit, $offset] = self::getPageParams();
+
+        $sql = "SELECT r.id, r.post_id, r.report_reason, r.created_at, p.content, p.is_banned FROM reported_posts r JOIN posts p ON r.post_id = p.post_id ORDER BY r.created_at DESC LIMIT ? OFFSET ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("ii", $limit, $offset);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $reports = [];
+        while($row = $result->fetch_assoc()){
+            $reports[] = [
+                "report_id" => $row["report_id"],
+                "post_id" => $row["post_id"],
+                "report_reason" => $row["report_reason"],
+                "created_at" => $row["created_at"],
+                "content" => $row["content"],
+                "is_banned" => $row["is_banned"]
+            ];
+        }
+
+        // Get total count for pagination
+        $countSql = "SELECT COUNT(*) as total_reports FROM reports";
+        $countStmt = $conn->prepare($countSql);
+        $countStmt->execute();
+        $countResult = $countStmt->get_result();
+        $totalReports = $countResult->fetch_assoc()["total_reports"];
+
+        Response::json([
+            "status" => true,
+            "page" => $page,
+            "total_pages" => ceil($totalReports / $limit),
+            "data" => $reports,
+            "limit" => $limit
+        ]);
+    }
+
+    public static function updateReportStatus(){
+    $conn = Database::connect();
+    $admin = AdminAuth::admin();
+
+    if(!$admin){
+        Response::json([
+            "status" => false,
+            "message" => "Unauthorized"
+        ], 401);
+        return;
+    }
+
+    $report_id = (int) (Request::input("report_id") ?? 0);
+    $status = trim(Request::input("status") ?? "");
+
+    if($report_id <= 0 || !in_array($status, ['pending', 'reviewed', 'removed'])){
+        Response::json([
+            "status" => false,
+            "message" => "Invalid report ID or status"
+        ], 400);
+        return;
+    }
+
+    try {
+        // Start transaction
+        $conn->begin_transaction();
+
+        // 1️⃣ Update report status
+        $sql = "UPDATE reported_posts SET status = ? WHERE id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("si", $status, $report_id);
+
+        if(!$stmt->execute()){
+            throw new Exception("Failed to update report");
+        }
+
+        // 2️⃣ If status is 'removed', ban the related post
+        if($status === 'removed'){
+            $sql = "UPDATE posts p 
+                    JOIN reported_posts r ON p.post_id = r.post_id 
+                    SET p.is_banned = 1 
+                    WHERE r.id = ?";
+                    
+            $banStmt = $conn->prepare($sql);
+            $banStmt->bind_param("i", $report_id);
+
+            if(!$banStmt->execute()){
+                throw new Exception("Failed to ban post");
+            }
+        }
+
+        // Commit if everything is successful
+        $conn->commit();
+
+        Response::json([
+            "status" => true,
+            "message" => "Report status updated successfully"
+        ]);
+
+    } catch (Exception $e) {
+        // Rollback on error
+        $conn->rollback();
+
+        Response::json([
+            "status" => false,
+            "message" => "Transaction failed: " . $e->getMessage()
+        ], 500);
+    }
+}
+
+    private static function getPageParams()
+    {
+        $page = max(1, (int) ($_GET['page'] ?? 1));
+        $limit = 15;
+        $offset = ($page - 1) * $limit;
+
+        return [$page, $limit, $offset];
+    }
 }
 

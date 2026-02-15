@@ -838,6 +838,10 @@ Router::add(
     true
 );
 
+Router::add("POST", "/auth/admin/refresh", fn() => AdminController::refresh(), false);
+
+Router::add("GET", "/api/admin/profile", fn() => AdminController::getProfile(), true);
+
 /* ------Get All Admin accounts----- */
 Router::add(
     "GET",
@@ -849,15 +853,18 @@ Router::add(
 
 /* ------Super Admin ban admin(moderator)---- */
 Router::add(
-    "GET",
+    "POST",
     "/api/ban-admin",
     fn() =>
     AdminController::banAdmin(),
     true
 );
+
+Router::add("POST", "/api/unban-admin", fn() => AdminController::unbanAdmin(), true);
+
 Router::add(
     "POST",
-    "/api/adminRegister",
+    "/api/admin/register",
     fn() =>
     AdminController::AdminRegister(),
     true
@@ -877,33 +884,94 @@ Router::add(
     AdminController::forgetPassword(),
     false
 );
+Router::add("POST", "/auth/admin/logout", fn() => AdminController::logout(), true);
+
+Router::add("GET", "/api/admin/get-users", fn() => AdminController::getUsers(), true);
 
 //Admin
 
 Router::add(
     "POST",
-    "/api/reset_password",
+    "/api/reset-password",
     fn() =>
     AdminController::resetPassword(),
     false
 );
 Router::add(
     "POST",
-    "/api/ban_user",
+    "/api/ban-user",
     fn() =>
     AdminController::banUser(),
     true
 );
+
 Router::add(
     "POST",
-    "/api/ban_post",
+    "/api/unban-user",
+    fn() => AdminController::unbanUser(),
+    true
+);
+
+Router::add(
+    "POST",
+    "/api/warn-user",
+    fn() => AdminController::warnUser(),
+    true
+);
+
+Router::add(
+    "POST",
+    "/api/remove-warn-user",
+    fn() => AdminController::removeWarnUser(),
+    true
+);
+
+Router::add(
+    "POST",
+    "/api/suspend-user",
+    fn() => AdminController::suspendUser(),
+    true
+);
+
+Router::add(
+    "POST",
+    "/api/unsuspend-user",
+    fn() => AdminController::unsuspendUser(),
+    true
+);
+
+Router::add(
+    "POST",
+    "/api/ban-post",
     fn() =>
     AdminController::banPost(),
     true
 );
+
 Router::add(
     "POST",
-    "/api/edit_admin_profile",
+    "/api/unban-post",
+    fn() => AdminController::unbanPost(),
+    true
+);
+
+Router::add(
+    "POST", 
+    "/api/update-post-report-status", 
+    fn() => AdminController::updateReportStatus(), 
+    true
+);
+
+Router::add(
+    "POST",
+    "/api/update-account-report-status",
+    fn() => ReportController::updateAccountReportStatus(),
+    true,
+);
+
+Router::add(
+    "POST",
+    "/api/edit-admin-profile",
     fn() =>
     AdminController::editAdminProfile(),
     false
