@@ -953,7 +953,7 @@ class AuthController
 
             // Fetch user info
             $userStmt = $conn->prepare("
-            SELECT user_id, username, email, role
+            SELECT user_id, username, email
             FROM users
             WHERE user_id = ?
             LIMIT 1
