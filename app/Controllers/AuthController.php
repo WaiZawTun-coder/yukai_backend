@@ -1200,7 +1200,7 @@ class AuthController
         ORDER BY expiration_time DESC
         LIMIT 1
     ");
-        $stmt->bind_param("i", $userId);
+        $stmt->bind_param("i", $user_id);
         $stmt->execute();
         $result = $stmt->get_result();
         $otpRecord = $result->fetch_assoc();
