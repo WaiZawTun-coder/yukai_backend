@@ -1206,7 +1206,7 @@ class AuthController
         $otpRecord = $result->fetch_assoc();
 
         if (!$otpRecord) {
-            Response::json(["error" => "Invalid or expired OTP."], 400);
+            Response::json(["error" => "Invalid or expired OTP.", "email" => $email, "user_id" => $user_id], 400);
         }
 
         // 🚫 Rate limit check
