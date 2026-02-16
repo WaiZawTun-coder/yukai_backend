@@ -51,6 +51,7 @@ require_once __DIR__ . "/../app/Controllers/DeviceController.php";
 require_once __DIR__ . "/../app/Controllers/NotificationController.php";
 require_once __DIR__ . "/../app/Controllers/ImageController.php";
 require_once __DIR__ . "/../app/Controllers/DashboardController.php";
+require_once __DIR__ . "/../app/Controllers/PrivacyController.php";";
 
 Router::dispatch();
 
