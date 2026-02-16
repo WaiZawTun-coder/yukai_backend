@@ -879,9 +879,9 @@ class AuthController
         $user = Auth::getUser();
         $userId = (int) ($user["user_id"] ?? 0);
         $otpCode = trim(Request::input("otp"));
-        $deviceId = Request::input("device_id");
+        // $deviceId = Request::input("device_id");
 
-        if (!$userId || !$otpCode || !$deviceId) {
+        if (!$userId || !$otpCode) {
             Response::json(["error" => "Missing required fields."], 400);
         }
 
@@ -968,30 +968,30 @@ class AuthController
             }
 
             // 🔒 Revoke old refresh tokens for this device
-            $revoke = $conn->prepare("
-            UPDATE refresh_tokens
-            SET revoked = 1
-            WHERE user_id = ? AND device_id = ?
-        ");
-            $revoke->bind_param("is", $userId, $deviceId);
-            $revoke->execute();
+        //     $revoke = $conn->prepare("
+        //     UPDATE refresh_tokens
+        //     SET revoked = 1
+        //     WHERE user_id = ? AND device_id = ?
+        // ");
+        //     $revoke->bind_param("is", $userId, $deviceId);
+        //     $revoke->execute();
 
-            // 🔑 Generate tokens
-            $accessToken = TokenService::generateAccessToken($user);
+        //     // 🔑 Generate tokens
+        //     $accessToken = TokenService::generateAccessToken($user);
 
-            $refreshToken = bin2hex(random_bytes(64));
-            $refreshHash = hash("sha256", $refreshToken);
+        //     $refreshToken = bin2hex(random_bytes(64));
+        //     $refreshHash = hash("sha256", $refreshToken);
 
-            $expiresAt = date("Y-m-d H:i:s", time() + (7 * 24 * 60 * 60));
+        //     $expiresAt = date("Y-m-d H:i:s", time() + (7 * 24 * 60 * 60));
 
-            // Store refresh token
-            $insert = $conn->prepare("
-            INSERT INTO refresh_tokens
-            (user_id, device_id, token_hash, expires_at, revoked)
-            VALUES (?, ?, ?, ?, 0)
-        ");
-            $insert->bind_param("isss", $userId, $deviceId, $refreshHash, $expiresAt);
-            $insert->execute();
+        //     // Store refresh token
+        //     $insert = $conn->prepare("
+        //     INSERT INTO refresh_tokens
+        //     (user_id, device_id, token_hash, expires_at, revoked)
+        //     VALUES (?, ?, ?, ?, 0)
+        // ");
+        //     $insert->bind_param("isss", $userId, $deviceId, $refreshHash, $expiresAt);
+        //     $insert->execute();
 
             $conn->commit();
 
