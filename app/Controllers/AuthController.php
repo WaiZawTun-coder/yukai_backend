@@ -931,7 +931,7 @@ class AuthController
             SET attempts = attempts + 1
             WHERE id = ?
         ");
-            $updateAttempts->bind_param("i", $otpRecord['id']);
+            $updateAttempts->bind_param("i", $otpRecord['otp_id']);
             $updateAttempts->execute();
 
             Response::json(["error" => "Invalid OTP."], 400);
@@ -946,9 +946,9 @@ class AuthController
             $markUsed = $conn->prepare("
             UPDATE otp 
             SET is_used = 1 
-            WHERE id = ?
+            WHERE otp_id = ?
         ");
-            $markUsed->bind_param("i", $otpRecord['id']);
+            $markUsed->bind_param("i", $otpRecord['otp_id']);
             $markUsed->execute();
 
             // Fetch user info
@@ -1193,7 +1193,7 @@ class AuthController
         }
 
         $stmt = $conn->prepare("
-        SELECT id, otp_code, expires_at, attempts
+        SELECT otp_id, otp_code, expires_at, attempts
         FROM otp
         WHERE user_id = ?
           AND is_used = 0
@@ -1237,7 +1237,7 @@ class AuthController
             SET attempts = attempts + 1
             WHERE id = ?
         ");
-            $updateAttempts->bind_param("i", $otpRecord['id']);
+            $updateAttempts->bind_param("i", $otpRecord['otp_id']);
             $updateAttempts->execute();
 
             Response::json(["error" => "Invalid OTP."], 400);
@@ -1254,7 +1254,7 @@ class AuthController
             SET is_used = 1 
             WHERE id = ?
         ");
-            $markUsed->bind_param("i", $otpRecord['id']);
+            $markUsed->bind_param("i", $otpRecord['otp_id']);
             $markUsed->execute();
 
             // Fetch user info
