@@ -10,6 +10,7 @@ use App\Core\Response;
 use App\Core\Database;
 use App\Core\Generator;
 use App\Service\EmailService;
+use App\Service\ImageService;
 use App\Service\TokenService;
 
 use App\Service\PasswordService;
@@ -370,7 +371,7 @@ class AdminController
             self::sendEmail($user['email'], $otp);
 
             Response::json([
-                "status" => false,
+                "status" => true,
                 "message" => "Password was not set. OTP sent to email.",
                 "action" => "SET_PASSWORD"
             ]);
@@ -553,7 +554,7 @@ class AdminController
         $body = "Hello,
 
             Dear User,
-            \n\nYour One-Time Password (OTP) for account verification is:\n\n  $otpcode\n\n This OTP is valid for 2 minutes.PLease Do not share this code with anyone.\n\n
+            \n\nYour One-Time Password (OTP) for account verification is:\n\n  $otpcode\n\n This OTP is valid for 5 minutes.PLease Do not share this code with anyone.\n\n
             If you didn't request this code,please ignore this email.\n\n
             Thank you for using our service!\n\n
 
@@ -882,11 +883,21 @@ class AdminController
         //     return; 
         //   }
 
-        $admin_id = (int) (Request::input("admin_id") ?? 0);
+        $admin = AdminAuth::admin();
+        $admin_id = (int) ($admin["admin_id"] ?? 0);
+
+        if($admin_id <= 0){
+            Response::json([
+                "status" => false,
+                "message" => "Unauthorized admin"
+            ]);
+        }
+
         $display_name = trim(Request::input("display_name") ?? "");
+        $username = trim(Request::input("username") ?? "");
         $email = trim(Request::input("email") ?? "");
-        $profile_image = trim(Request::input("profile_image") ?? "");
-        $password = trim(Request::input('password') ?? "");
+        $profile_image = Request::file("profile_image") ?? null;
+        // $password = trim(Request::input('password') ?? "");
         //Authorization::Only admins can only edit their own profile
         // if($current_admin['admin_id']!==$admin_id){
         //     Response::json([
@@ -912,14 +923,13 @@ class AdminController
 
 
         $admin = $result->fetch_assoc();
-        $updates = $updates ?? [];
-        $params = $params ?? [];
+        $updates = [];
+        $params = [];
         $types = "";
 
         // =====================================
         // NORMAL PROFILE UPDATES
         // =====================================
-
 
         if (!empty($display_name)) {
             $current_display_name = trim($admin['display_name'] ?? '');
@@ -966,17 +976,27 @@ class AdminController
             $params[] = $email;
             $types .= "s";
         }
-        if (!empty($password)) {
-            PasswordService::isStrong($password);
-            $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
-            $updates[] = "password = ?";
-            $params[] = $hashedPassword;
-            $types .= "s";
-        }
+        // if (!empty($password)) {
+        //     PasswordService::isStrong($password);
+        //     $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+        //     $updates[] = "password = ?";
+        //     $params[] = $hashedPassword;
+        //     $types .= "s";
+        // }
 
         if (!empty($profile_image)) {
+            $imageUploadResult = ImageService::uploadImage($profile_image);
+            $secure_url = $imageUploadResult["secure_url"] ?? "";
+
+            if($secure_url == ""){
+                Response::json([
+                    "status" => false,
+                    "message" => "Failed to upload profile image."
+                ]);
+            }
+
             $updates[] = "profile_image = ?";
-            $params[] = $profile_image;
+            $params[] = $secure_url;
             $types .= "s";
         }
 
@@ -1005,7 +1025,13 @@ class AdminController
             if ($stmt->affected_rows > 0) {
                 Response::json([
                     "status" => true,
-                    "message" => "Admin updated successfully"
+                    "message" => "Admin updated successfully",
+                    "data" => [
+                        "admin_id" => $admin_id,
+                        "display_name" => $display_name ?: $admin["display_name"],
+                        "email" => $email ?: $admin["email"],
+                        "profile_image" => $secure_url ?? $admin["profile_image"]
+                    ]
                 ], 200);
             } else {
                 Response::json([
@@ -1013,6 +1039,100 @@ class AdminController
                     "message" => "No changes were made"
                 ], 200);
             }
+        }
+    }
+
+    public static function checkAdminPassword(){
+        $conn = Database::connect();
+
+        $admin = AdminAuth::admin();
+        $admin_id = (int) ($admin["admin_id"] ?? 0);
+        $password = trim(Request::input("password") ?? "");
+
+        if($admin_id <= 0){
+            Response::json([
+                "status" => false,
+                "message" => "Unauthorized admin"
+            ], 401);
+        }
+
+        if(empty($password)){
+            Response::json([
+                "status" => false,
+                "message" => "Password is required"
+            ], 400);
+        }
+
+        $sql = "SELECT password FROM admin WHERE admin_id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $admin_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        if($result->num_rows == 0){
+            Response::json([
+                "status" => false,
+                "message" => "Admin not found"
+            ], 404);
+        };
+
+        $row = $result->fetch_assoc();
+        if($row["password"] == null){
+            Response::json([
+                "status" => false,
+                "message" => "Password not set for this admin"
+            ], 400);
+        }
+
+        if(PasswordService::verify($password, $row["password"])){
+            Response::json([
+                "status" => true,
+                "message" => "Password is correct"
+            ]);
+        }
+
+        Response::json([
+            "status" => false,
+            "message" => "Incorrect password"
+        ], 400);
+    }
+
+    public static function updateAdminPassword(){
+        $conn = Database::connect();
+        $admin = AdminAuth::admin();
+        
+        if(!$admin){
+            Response::json([
+                "status" => false,
+                "message" => "Unauthorized admin"
+            ], 400);
+        }
+        $admin_id = (int) ($admin["admin_id"] ?? 0);
+
+        $newPassword = trim(Request::input("new_password") ?? "");
+
+        if(empty($newPassword)){
+            Response::json([
+                "status" => false,
+                "message" => "New password is required"
+            ], 400);
+        }
+
+        $hashNewPassword = PasswordService::hash($newPassword);
+
+        $sql = "UPDATE admin SET password = ? WHERE admin_id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("si", $hashNewPassword, $admin_id);
+
+        if($stmt->execute()){
+            Response::json([
+                "status" => true,
+                "message" => "Password updated successfully"
+            ]);
+        }else{
+            Response::json([
+                "status" => false,
+                "message" => "Failed to update password"
+            ], 500);
         }
     }
 
@@ -1141,7 +1261,7 @@ class AdminController
 
         // Fetch admin data
         $stmt = $conn->prepare("
-        SELECT admin_id, username, email, display_name, role, is_active, last_seen
+        SELECT admin_id, username, email, display_name, role, is_active, last_seen, profile_image
         FROM admin
         WHERE admin_id = ?
         LIMIT 1

@@ -2,6 +2,7 @@
 
 use App\Controllers\AdminController;
 use App\Controllers\AuthController;
+use App\Controllers\DashboardController;
 use App\Controllers\DeviceController;
 use App\Controllers\FriendController;
 use App\Controllers\NotificationController;
@@ -842,6 +843,13 @@ Router::add("POST", "/auth/admin/refresh", fn() => AdminController::refresh(), f
 
 Router::add("GET", "/api/admin/profile", fn() => AdminController::getProfile(), true);
 
+Router::add(
+    "GET",
+    "/api/admin/dashboard",
+    fn() => DashboardController::getDashboard(),
+    true
+);
+
 /* ------Get All Admin accounts----- */
 Router::add(
     "GET",
@@ -974,7 +982,21 @@ Router::add(
     "/api/edit-admin-profile",
     fn() =>
     AdminController::editAdminProfile(),
-    false
+    true
+);
+
+Router::add(
+    "POST",
+    "/api/check-admin-password",
+    fn() => AdminController::checkAdminPassword(), 
+    true
+);
+
+Router::add(
+    "POST",
+    "/api/change-admin-password",
+    fn() => AdminController::updateAdminPassword(),
+    true
 );
 
 /*

@@ -50,6 +50,7 @@ require_once __DIR__ . "/../app/Controllers/AdminController.php";
 require_once __DIR__ . "/../app/Controllers/DeviceController.php";
 require_once __DIR__ . "/../app/Controllers/NotificationController.php";
 require_once __DIR__ . "/../app/Controllers/ImageController.php";
+require_once __DIR__ . "/../app/Controllers/DashboardController.php";
 
 Router::dispatch();
 

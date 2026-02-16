@@ -168,6 +168,7 @@ class AuthController
         $accessToken = TokenService::generateAccessToken([
             "user_id" => $user['user_id'],
             "username" => $user['username'],
+            "scope" => "registration",
             "two_factor_verified" => true
         ]);
 
@@ -244,6 +245,10 @@ class AuthController
                 $stmt->execute();
             }
         }
+
+        $stmt = $conn->prepare("UPDATE users SET last_seen = NOW() WHERE user_id = ?");
+        $stmt->bind_param("i", $user["user_id"]);
+        $stmt->execute();
 
         self::resetAttempts($user["user_id"]);
         Response::json([
@@ -546,6 +551,19 @@ class AuthController
                         "message" => "Registration failed - step 2"
                     ], 500);
                 }
+                
+
+                $isSecure =
+                    (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+                    || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
+
+                setcookie("refresh_token", "", [
+                    "expires" => time() - 3600,
+                    "path" => "/",
+                    "secure" => $isSecure,
+                    "httponly" => true,
+                    "samesite" => $isSecure ? "None" : "Lax",
+                ]);
 
                 Response::json([
                     "status" => true,
@@ -571,6 +589,7 @@ class AuthController
 
         $refreshToken = $_COOKIE["refresh_token"] ?? null;
         $device_id = Request::input("device_id") ?? "";
+        $scope = Request::input("scope") ?? "";
 
         if (!$refreshToken) {
             Response::json([
@@ -601,7 +620,7 @@ class AuthController
                 "path" => "/",
                 "secure" => $isSecure,
                 "httponly" => true,
-                "samesite" => $isSecure ? "None" : "Lax"
+                "samesite" => $isSecure ? "None" : "Lax",
             ]);
 
             Response::json([
@@ -661,13 +680,23 @@ class AuthController
             "secure" => $isSecure,
             "httponly" => true,
             "samesite" => $isSecure ? "None" : "Lax"
+            
         ]);
 
         // Generate new access token
-        $accessToken = TokenService::generateAccessToken([
+        $token_data = empty($scope) ? [
             "user_id" => $tokenData["user_id"],
             "username" => $tokenData["username"]
-        ]);
+        ] : [
+            "user_id" => $tokenData["user_id"],
+            "username" => $tokenData["username"],
+            "scope" => $scope
+        ];
+        $accessToken = TokenService::generateAccessToken($token_data);
+
+        $stmt = $conn->prepare("UPDATE users SET last_seen = NOW() WHERE user_id = ?");
+        $stmt->bind_param("i", $tokenData["user_id"]);
+        $stmt->execute();
 
         Response::json([
             "status" => true,
@@ -677,6 +706,130 @@ class AuthController
             ]
         ]);
     }
+
+    private static function internalRefresh()
+    {
+        $conn = Database::connect();
+
+        $isSecure =
+            (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
+
+        $refreshToken = $_COOKIE["refresh_token"] ?? null;
+        $device_id = Request::input("device_id") ?? "";
+
+        if (!$refreshToken) {
+            Response::json([
+                "status" => false,
+                "message" => "Refresh token missing"
+            ], 401);
+            return;
+        }
+
+        $refreshHash = hash("sha256", $refreshToken);
+
+        // Lookup in refresh_tokens table
+        $stmt = $conn->prepare("
+        SELECT rt.id, rt.user_id, rt.expires_at, u.username
+        FROM refresh_tokens rt
+        JOIN users u ON u.user_id = rt.user_id
+        WHERE rt.token_hash = ? AND rt.revoked = 0
+        LIMIT 1
+    ");
+        $stmt->bind_param("s", $refreshHash);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        if ($result->num_rows === 0) {
+            // Invalid token
+            setcookie("refresh_token", "", [
+                "expires" => time() - 3600,
+                "path" => "/",
+                "secure" => $isSecure,
+                "httponly" => true,
+                "samesite" => $isSecure ? "None" : "Lax",
+            ]);
+
+            Response::json([
+                "status" => false,
+                "message" => "Invalid refresh token"
+            ], 401);
+            return;
+        }
+
+        $tokenData = $result->fetch_assoc();
+
+        // Check expiry
+        if (strtotime($tokenData["expires_at"]) < time()) {
+            // Revoke expired token
+            $stmt = $conn->prepare("UPDATE refresh_tokens SET revoked = 1 WHERE id = ?");
+            $stmt->bind_param("i", $tokenData["id"]);
+            $stmt->execute();
+
+            setcookie("refresh_token", "", [
+                "expires" => time() - 3600,
+                "path" => "/",
+                "secure" => $isSecure,
+                "httponly" => true,
+                "samesite" => $isSecure ? "None" : "Lax"
+            ]);
+
+            Response::json([
+                "status" => false,
+                "message" => "Refresh token expired"
+            ], 401);
+            return;
+        }
+
+        // Rotate refresh token (generate new one)
+        $refreshPayload = TokenService::generateRefreshToken();
+        $newRefreshToken = $refreshPayload["token"];
+        $newRefreshHash = $refreshPayload["hash"];
+        $newExpire = date("Y-m-d H:i:s", time() + 604800); // 7 days
+
+        // Insert new refresh token
+        $stmt = $conn->prepare("
+        INSERT INTO refresh_tokens (user_id, device_id, token_hash, issued_at, expires_at)
+        VALUES (?, ?, ?,NOW(), ?)
+    ");
+        $stmt->bind_param("isss", $tokenData["user_id"], $device_id, $newRefreshHash, $newExpire);
+        $stmt->execute();
+
+        // Revoke old token
+        $stmt = $conn->prepare("UPDATE refresh_tokens SET revoked = 1 WHERE id = ?");
+        $stmt->bind_param("i", $tokenData["id"]);
+        $stmt->execute();
+
+        // Set cookie for client
+        setcookie("refresh_token", $newRefreshToken, [
+            "expires" => time() + 604800,
+            "path" => "/",
+            "secure" => $isSecure,
+            "httponly" => true,
+            "samesite" => $isSecure ? "None" : "Lax"
+            
+        ]);
+
+        // Generate new access token
+        $token_data = [
+            "user_id" => $tokenData["user_id"],
+            "username" => $tokenData["username"]
+        ];
+        $accessToken = TokenService::generateAccessToken($token_data);
+
+        $stmt = $conn->prepare("UPDATE users SET last_seen = NOW() WHERE user_id = ?");
+        $stmt->bind_param("i", $tokenData["user_id"]);
+        $stmt->execute();
+
+        Response::json([
+            "status" => true,
+            "message" => "Token refreshed",
+            "data" => [
+                "access_token" => $accessToken
+            ]
+        ]);
+    }
+
     // generate OTP 
     public static function generateOTP($user_id)
     {
@@ -723,7 +876,8 @@ class AuthController
     {
         $conn = Database::connect();
 
-        $userId = (int) Request::input("user_id");
+        $user = Auth::getUser();
+        $userId = (int) ($user["user_id"] ?? 0);
         $otpCode = trim(Request::input("otp"));
         $deviceId = Request::input("device_id");
 
@@ -751,6 +905,13 @@ class AuthController
 
         // 🚫 Rate limit check
         if ($otpRecord['attempts'] >= 5) {
+            // update the otp as used to prevent further attempts
+            $stmt = $conn->prepare(
+                "UPDATE otp SET is_used = 1 WHERE user_id = ?;"
+            );
+            $stmt->bind_param("i", $userId);
+            $stmt->execute();
+            
             Response::json([
                 "error" => "Too many failed attempts. Please request a new OTP."
             ], 429);
@@ -816,7 +977,7 @@ class AuthController
             $revoke->execute();
 
             // 🔑 Generate tokens
-            $accessToken = JWTHandler::generateAccessToken($user);
+            $accessToken = TokenService::generateAccessToken($user);
 
             $refreshToken = bin2hex(random_bytes(64));
             $refreshHash = hash("sha256", $refreshToken);
@@ -863,61 +1024,67 @@ class AuthController
 
 
     public static function sendEmail($email, $otpcode)
-    {
-        $subject = "Password Rest OTP";
-        $body = "Hello,
-
-            Dear User,
-            \n\nYour One-Time Password (OTP) for account verification is:\n\n  $otpcode\n\n This OTP is valid for 5 minutes.PLease Do not share this code with anyone.\n\n
-            If you didn't request this code,please ignore this email.\n\n
-            Thank you for using our service!\n\n
-
-            Best regards,
-            Yukai Support Team";
-
-        if ($email === "") {
-            Response::json([
-                "status" => false,
-                "message" => "Email address is required"
-            ], 400);
-        }
-
-        $mail = new PHPMailer(true);
-
-        try {
-            $mail->isSMTP();
-            $mail->Host = 'smtp.gmail.com';
-            $mail->SMTPAuth = true;
-            $mail->Username = $_ENV['GMAIL_USERNAME'];
-            $mail->Password = $_ENV['GMAIL_APP_PASSWORD'];
-            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-            $mail->Port = 587;
-
-            $mail->CharSet = 'UTF-8';
-
-            $mail->setFrom($_ENV['GMAIL_USERNAME'], 'Yukai Support Team');
-            $mail->addAddress($email);
-
-            $mail->isHTML(false);
-            $mail->Subject = $subject;
-            $mail->Body = $body;
-
-            $mail->send();
-            return true;
-            // Response::json([
-            //     "status" => true,
-            //     "message" => "Email sent successfully"
-            // ]);
-
-        } catch (Exception $e) {
-            Response::json([
-                "status" => false,
-                "message" => "Mailer error",
-                "error" => $mail->ErrorInfo
-            ], 500);
-        }
-
+{
+    if (empty($email)) {
+        Response::json([
+            "status" => false,
+            "message" => "Email address is required"
+        ], 400);
+        return false;
     }
+
+    $subject = "Password Reset OTP";
+    $body = "Hello,
+
+Dear User,
+
+Your One-Time Password (OTP) is:
+
+<h3>$otpcode</h3>
+
+This OTP is valid for 5 minutes.
+Please do not share this code with anyone.
+
+If you didn't request this code, please ignore this email.
+
+Best regards,
+Yukai Support Team";
+
+    $mail = new PHPMailer(true);
+
+    try {
+        $mail->isSMTP();
+        $mail->Host       = 'smtp.gmail.com';
+        $mail->SMTPAuth   = true;
+        $mail->Username   = $_ENV['GMAIL_USERNAME'];
+        $mail->Password   = $_ENV['GMAIL_APP_PASSWORD'];
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Port       = 587;
+
+        $mail->CharSet = 'UTF-8';
+
+        $mail->setFrom($_ENV['GMAIL_USERNAME'], 'Yukai Support Team');
+        $mail->addAddress($email);
+
+        $mail->Subject = $subject;
+        $mail->isHTML(true);
+        $mail->Body    = $body;
+
+        $mail->send();
+        $mail->SMTPDebug = 2;
+        return true;
+
+    } catch (Exception $e) {
+        error_log("Mailer Error: " . $mail->ErrorInfo);
+
+        Response::json([
+            "status" => false,
+            "message" => "Failed to send email"
+        ], 500);
+
+        return false;
+    }
+}
 
     //forget password function
 
