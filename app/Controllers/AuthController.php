@@ -1033,57 +1033,55 @@ class AuthController
         return false;
     }
 
-    $subject = "Password Reset OTP";
-    $body = "Hello,
+    $apiKey = $_ENV['BREVO_API_KEY'];
+    $sender = $_ENV['BREVO_SENDER'];
 
-Dear User,
+    $data = [
+        "sender" => [
+            "name" => "Yukai Support",
+            "email" => $sender
+        ],
+        "to" => [
+            ["email" => $email]
+        ],
+        "subject" => "Password Reset OTP",
+        "htmlContent" => "
+            Hello,<br><br>
+            Your OTP code is:<br><br>
+            <h2>$otpcode</h2>
+            This OTP is valid for 5 minutes.<br><br>
+            Do not share this code with anyone.<br><br>
+            Yukai Support Team
+        "
+    ];
 
-Your One-Time Password (OTP) is:
+    $ch = curl_init();
 
-<h3>$otpcode</h3>
+    curl_setopt($ch, CURLOPT_URL, "https://api.brevo.com/v3/smtp/email");
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
 
-This OTP is valid for 5 minutes.
-Please do not share this code with anyone.
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        "accept: application/json",
+        "api-key: $apiKey",
+        "content-type: application/json"
+    ]);
 
-If you didn't request this code, please ignore this email.
+    $response = curl_exec($ch);
+    $error = curl_error($ch);
+    curl_close($ch);
 
-Best regards,
-Yukai Support Team";
-
-    $mail = new PHPMailer(true);
-
-    try {
-        $mail->isSMTP();
-        $mail->Host       = 'smtp.gmail.com';
-        $mail->SMTPAuth   = true;
-        $mail->Username   = $_ENV['GMAIL_USERNAME'];
-        $mail->Password   = $_ENV['GMAIL_APP_PASSWORD'];
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        $mail->Port       = 587;
-
-        $mail->CharSet = 'UTF-8';
-
-        $mail->setFrom($_ENV['GMAIL_USERNAME'], 'Yukai Support Team');
-        $mail->addAddress($email);
-
-        $mail->Subject = $subject;
-        $mail->isHTML(true);
-        $mail->Body    = $body;
-
-        $mail->send();
-        $mail->SMTPDebug = 2;
-        return true;
-
-    } catch (Exception $e) {
-        error_log("Mailer Error: " . $mail->ErrorInfo);
-
+    if ($error) {
         Response::json([
             "status" => false,
-            "message" => "Failed to send email"
+            "message" => "Failed to send email",
+            "error" => $error
         ], 500);
-
         return false;
     }
+
+    return true;
 }
 
     //forget password function

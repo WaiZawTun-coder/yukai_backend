@@ -1104,10 +1104,3 @@ Router::add(
     fn() => AuthController::logoutAllDevices(),
     true,
 );
-
-Router::add(
-    "GET",
-    "/api/send-email-test",
-    fn() => AuthController::sendEmailTest("waizawtun.coder@gmail.com", "123456"),
-    false
-);

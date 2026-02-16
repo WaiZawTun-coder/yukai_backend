@@ -549,61 +549,64 @@ class AdminController
     }
 
     public static function sendEmail($email, $otpcode)
-    {
-        $subject = "Password Rest OTP";
-        $body = "Hello,
-
-            Dear User,
-            \n\nYour One-Time Password (OTP) for account verification is:\n\n  $otpcode\n\n This OTP is valid for 5 minutes.PLease Do not share this code with anyone.\n\n
-            If you didn't request this code,please ignore this email.\n\n
-            Thank you for using our service!\n\n
-
-            Best regards,
-            Yukai Support Team";
-
-        if ($email === "") {
-            Response::json([
-                "status" => false,
-                "message" => "Email address is required"
-            ], 400);
-        }
-
-        $mail = new PHPMailer(true);
-
-        try {
-            $mail->isSMTP();
-            $mail->Host = 'smtp.gmail.com';
-            $mail->SMTPAuth = true;
-            $mail->Username = $_ENV['GMAIL_USERNAME'];
-            $mail->Password = $_ENV['GMAIL_APP_PASSWORD'];
-            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-            $mail->Port = 587;
-
-            $mail->CharSet = 'UTF-8';
-
-            $mail->setFrom($_ENV['GMAIL_USERNAME'], 'May Thingyan');
-            $mail->addAddress($email);
-
-            $mail->isHTML(false);
-            $mail->Subject = $subject;
-            $mail->Body = $body;
-
-            $mail->send();
-            return true;
-            // Response::json([
-            //     "status" => true,
-            //     "message" => "Email sent successfully"
-            // ]);
-
-        } catch (Exception $e) {
-            Response::json([
-                "status" => false,
-                "message" => "Mailer error",
-                "error" => $mail->ErrorInfo
-            ], 500);
-        }
-
+{
+    if (empty($email)) {
+        Response::json([
+            "status" => false,
+            "message" => "Email address is required"
+        ], 400);
+        return false;
     }
+
+    $apiKey = $_ENV['BREVO_API_KEY'];
+    $sender = $_ENV['BREVO_SENDER'];
+
+    $data = [
+        "sender" => [
+            "name" => "Yukai Support",
+            "email" => $sender
+        ],
+        "to" => [
+            ["email" => $email]
+        ],
+        "subject" => "Password Reset OTP",
+        "htmlContent" => "
+            Hello,<br><br>
+            Your OTP code is:<br><br>
+            <h2>$otpcode</h2>
+            This OTP is valid for 5 minutes.<br><br>
+            Do not share this code with anyone.<br><br>
+            Yukai Support Team
+        "
+    ];
+
+    $ch = curl_init();
+
+    curl_setopt($ch, CURLOPT_URL, "https://api.brevo.com/v3/smtp/email");
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        "accept: application/json",
+        "api-key: $apiKey",
+        "content-type: application/json"
+    ]);
+
+    $response = curl_exec($ch);
+    $error = curl_error($ch);
+
+    if ($error) {
+        Response::json([
+            "status" => false,
+            "message" => "Failed to send email",
+            "error" => $error
+        ], 500);
+        return false;
+    }
+
+    return true;
+}
 
     public static function forgetPassword()
     {
