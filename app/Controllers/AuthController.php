@@ -180,7 +180,7 @@ class AuthController
 
         // Save hashed refresh token to refresh_tokens table
         $stmt = $conn->prepare("
-    INSERT INTO refresh_tokens (user_id, device_id, token_hash, issued_at, expiration_time)
+    INSERT INTO refresh_tokens (user_id, device_id, token_hash, issued_at, expires_at)
     VALUES (?, ?, ?, NOW(), ?)
 ");
         $stmt->bind_param("isss", $user['user_id'], $device_id, $refreshHash, $expireAt);
@@ -603,7 +603,7 @@ class AuthController
 
         // Lookup in refresh_tokens table
         $stmt = $conn->prepare("
-        SELECT rt.id, rt.user_id, rt.expiration_time, u.username
+        SELECT rt.id, rt.user_id, rt.expires_at, u.username
         FROM refresh_tokens rt
         JOIN users u ON u.user_id = rt.user_id
         WHERE rt.token_hash = ? AND rt.revoked = 0
@@ -633,7 +633,7 @@ class AuthController
         $tokenData = $result->fetch_assoc();
 
         // Check expiry
-        if (strtotime($tokenData["expiration_time"]) < time()) {
+        if (strtotime($tokenData["expires_at"]) < time()) {
             // Revoke expired token
             $stmt = $conn->prepare("UPDATE refresh_tokens SET revoked = 1 WHERE id = ?");
             $stmt->bind_param("i", $tokenData["id"]);
@@ -662,7 +662,7 @@ class AuthController
 
         // Insert new refresh token
         $stmt = $conn->prepare("
-        INSERT INTO refresh_tokens (user_id, device_id, token_hash, issued_at, expiration_time)
+        INSERT INTO refresh_tokens (user_id, device_id, token_hash, issued_at, expires_at)
         VALUES (?, ?, ?,NOW(), ?)
     ");
         $stmt->bind_param("isss", $tokenData["user_id"], $device_id, $newRefreshHash, $newExpire);
@@ -730,7 +730,7 @@ class AuthController
 
         // Lookup in refresh_tokens table
         $stmt = $conn->prepare("
-        SELECT rt.id, rt.user_id, rt.expiration_time, u.username
+        SELECT rt.id, rt.user_id, rt.expires_at, u.username
         FROM refresh_tokens rt
         JOIN users u ON u.user_id = rt.user_id
         WHERE rt.token_hash = ? AND rt.revoked = 0
@@ -760,7 +760,7 @@ class AuthController
         $tokenData = $result->fetch_assoc();
 
         // Check expiry
-        if (strtotime($tokenData["expiration_time"]) < time()) {
+        if (strtotime($tokenData["expires_at"]) < time()) {
             // Revoke expired token
             $stmt = $conn->prepare("UPDATE refresh_tokens SET revoked = 1 WHERE id = ?");
             $stmt->bind_param("i", $tokenData["id"]);
@@ -789,7 +789,7 @@ class AuthController
 
         // Insert new refresh token
         $stmt = $conn->prepare("
-        INSERT INTO refresh_tokens (user_id, device_id, token_hash, issued_at, expiration_time)
+        INSERT INTO refresh_tokens (user_id, device_id, token_hash, issued_at, expires_at)
         VALUES (?, ?, ?,NOW(), ?)
     ");
         $stmt->bind_param("isss", $tokenData["user_id"], $device_id, $newRefreshHash, $newExpire);
@@ -987,7 +987,7 @@ class AuthController
             // Store refresh token
             $insert = $conn->prepare("
             INSERT INTO refresh_tokens
-            (user_id, device_id, token_hash, expiration_time, revoked)
+            (user_id, device_id, token_hash, expires_at, revoked)
             VALUES (?, ?, ?, ?, 0)
         ");
             $insert->bind_param("isss", $userId, $deviceId, $refreshHash, $expiresAt);
@@ -1494,7 +1494,7 @@ class AuthController
         $device_id = (string) (Request::input("device_id") ?? null);
 
         $stmt = $conn->prepare("
-        INSERT INTO refresh_tokens (user_id, device_id, token_hash, issued_at, expiration_time)
+        INSERT INTO refresh_tokens (user_id, device_id, token_hash, issued_at, expires_at)
         VALUES (?, ?, ?, NOW(), ?)
     ");
         $stmt->bind_param("isss", $user['user_id'], $device_id, $refreshHash, $expireAt);
