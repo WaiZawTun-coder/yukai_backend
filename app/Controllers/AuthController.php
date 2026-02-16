@@ -1491,51 +1491,54 @@ Yukai Support Team";
         return false;
     }
 
-    $subject = "Password Reset OTP";
+    $apiKey = $_ENV['BREVO_API_KEY'];
+    $sender = $_ENV['BREVO_SENDER'];
 
-    $body = "
-    Hello,<br><br>
-    Your OTP code is:<br><br>
-    <h2>$otpcode</h2>
-    This OTP is valid for 5 minutes.<br><br>
-    Do not share this code with anyone.<br><br>
-    Yukai Support Team
-    ";
+    $data = [
+        "sender" => [
+            "name" => "Yukai Support",
+            "email" => $sender
+        ],
+        "to" => [
+            ["email" => $email]
+        ],
+        "subject" => "Password Reset OTP",
+        "htmlContent" => "
+            Hello,<br><br>
+            Your OTP code is:<br><br>
+            <h2>$otpcode</h2>
+            This OTP is valid for 5 minutes.<br><br>
+            Do not share this code with anyone.<br><br>
+            Yukai Support Team
+        "
+    ];
 
-    $mail = new PHPMailer(true);
+    $ch = curl_init();
 
-    try {
-        $mail->isSMTP();
-        $mail->Host       = $_ENV['SMTP_HOST'];
-        $mail->SMTPAuth   = true;
-        $mail->Username   = $_ENV['SMTP_USER'];
-        $mail->Password   = $_ENV['SMTP_PASS'];
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        $mail->Port       = $_ENV['SMTP_PORT'];
+    curl_setopt($ch, CURLOPT_URL, "https://api.brevo.com/v3/smtp/email");
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
 
-        $mail->setFrom($_ENV['SMTP_FROM'], 'Yukai Support');
-        $mail->addAddress($email);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        "accept: application/json",
+        "api-key: $apiKey",
+        "content-type: application/json"
+    ]);
 
-        $mail->isHTML(true);
-        $mail->Subject = $subject;
-        $mail->Body    = $body;
+    $response = curl_exec($ch);
+    $error = curl_error($ch);
+    curl_close($ch);
 
-        $mail->Timeout = 10;
-        $mail->send();
-        $mail->SMTPDebug = 2;
-        return true;
-
-    } catch (Exception $e) {
-        error_log("Mailer Error: " . $mail->ErrorInfo);
-
-        // return json_decode($e->getMessage(), true);
+    if ($error) {
         Response::json([
             "status" => false,
             "message" => "Failed to send email",
-            "" -> $e->getMessage()
+            "error" => $error
         ], 500);
-
         return false;
     }
+
+    return true;
 }
 }
