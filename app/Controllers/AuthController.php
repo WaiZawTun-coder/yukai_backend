@@ -573,7 +573,7 @@ class AuthController
             default:
                 Response::json([
                     "status" => false,
-                    "message" => "Invalid Registratino Step"
+                    "message" => "Invalid Registration Step"
                 ]);
                 break;
         }
@@ -887,7 +887,7 @@ class AuthController
 
         // Fetch latest unused OTP
         $stmt = $conn->prepare("
-        SELECT id, otp_code, expiration_time, attempts
+        SELECT otp_id, otp_code, expiration_time, attempts
         FROM otp
         WHERE user_id = ?
           AND is_used = 0
@@ -923,13 +923,13 @@ class AuthController
         }
 
         // ❌ Wrong OTP
-        if (!hash_equals($otpRecord['otp_code'], $otpCode)) {
+        if (!password_verify($otpCode, $otpRecord['otp_code'])) {
 
             // Increment attempts
             $updateAttempts = $conn->prepare("
             UPDATE otp 
             SET attempts = attempts + 1
-            WHERE id = ?
+            WHERE otp_id = ?
         ");
             $updateAttempts->bind_param("i", $otpRecord['otp_id']);
             $updateAttempts->execute();
@@ -1044,7 +1044,7 @@ class AuthController
         "to" => [
             ["email" => $email]
         ],
-        "subject" => "Password Reset OTP",
+        "subject" => "Your verification code",
         "htmlContent" => "
             Hello,<br><br>
             Your OTP code is:<br><br>
@@ -1215,7 +1215,7 @@ class AuthController
             $stmt = $conn->prepare(
                 "UPDATE otp SET is_used = 1 WHERE user_id = ?;"
             );
-            $stmt->bind_param("i", $userId);
+            $stmt->bind_param("i", $user_id);
             $stmt->execute();
             
             Response::json([
@@ -1229,13 +1229,13 @@ class AuthController
         }
 
         // ❌ Wrong OTP
-        if (!hash_equals($otpRecord['otp_code'], $otpCode)) {
+        if (!password_verify($otpCode, $otpRecord['otp_code'])) {
 
             // Increment attempts
             $updateAttempts = $conn->prepare("
             UPDATE otp 
             SET attempts = attempts + 1
-            WHERE id = ?
+            WHERE otp_id = ?
         ");
             $updateAttempts->bind_param("i", $otpRecord['otp_id']);
             $updateAttempts->execute();
@@ -1252,7 +1252,7 @@ class AuthController
             $markUsed = $conn->prepare("
             UPDATE otp 
             SET is_used = 1 
-            WHERE id = ?
+            WHERE otp_id = ?
         ");
             $markUsed->bind_param("i", $otpRecord['otp_id']);
             $markUsed->execute();
@@ -1264,7 +1264,7 @@ class AuthController
             WHERE user_id = ?
             LIMIT 1
         ");
-            $userStmt->bind_param("i", $userId);
+            $userStmt->bind_param("i", $user_id);
             $userStmt->execute();
             $userResult = $userStmt->get_result();
             $user = $userResult->fetch_assoc();
@@ -1273,33 +1273,34 @@ class AuthController
                 throw new Exception("User not found.");
             }
 
-            // 🔒 Revoke old refresh tokens for this device
-            $revoke = $conn->prepare("
-            UPDATE refresh_tokens
-            SET revoked = 1
-            WHERE user_id = ? AND device_id = ?
-        ");
-            $revoke->bind_param("is", $userId, $deviceId);
-            $revoke->execute();
+        //     // 🔒 Revoke old refresh tokens for this device
+        //     $revoke = $conn->prepare("
+        //     UPDATE refresh_tokens
+        //     SET revoked = 1
+        //     WHERE user_id = ? AND device_id = ?
+        // ");
+        //     $revoke->bind_param("is", $user_id, $deviceId);
+        //     $revoke->execute();
 
-            // 🔑 Generate tokens
-            $accessToken = TokenService::generateAccessToken($user);
+        //     // 🔑 Generate tokens
+        //     $accessToken = TokenService::generateAccessToken($user);
 
-            $refreshToken = bin2hex(random_bytes(64));
-            $refreshHash = hash("sha256", $refreshToken);
+        //     $refreshToken = bin2hex(random_bytes(64));
+        //     $refreshHash = hash("sha256", $refreshToken);
 
-            $expiresAt = date("Y-m-d H:i:s", time() + (7 * 24 * 60 * 60));
+        //     $expiresAt = date("Y-m-d H:i:s", time() + (7 * 24 * 60 * 60));
 
-            // Store refresh token
-            $insert = $conn->prepare("
-            INSERT INTO refresh_tokens
-            (user_id, device_id, token_hash, expiration_time, revoked)
-            VALUES (?, ?, ?, ?, 0)
-        ");
-            $insert->bind_param("isss", $userId, $deviceId, $refreshHash, $expiresAt);
-            $insert->execute();
+        //     // Store refresh token
+        //     $insert = $conn->prepare("
+        //     INSERT INTO refresh_tokens
+        //     (user_id, device_id, token_hash, expiration_time, revoked)
+        //     VALUES (?, ?, ?, ?, 0)
+        // ");
+        //     $insert->bind_param("isss", $user_id, $deviceId, $refreshHash, $expiresAt);
+        //     $insert->execute();
 
             $conn->commit();
+            return true;
 
         } catch (Exception $e) {
             $conn->rollback();
@@ -1325,7 +1326,7 @@ class AuthController
                 "message" => "user_id and otp code is required"
             ]);
         }
-        if (!self::verifyOTP($user_id, $otpcode)) {
+        if (!self::verifyOTP()) {
             Response::json([
                 "status" => false,
                 "message" => "Invalid input"
@@ -1458,7 +1459,7 @@ class AuthController
         }
 
         // Verify OTP
-        $result = self::verifyOTP($user_id, $otp);
+        $result = self::verifyOTP();
 
         if (!$result) {
             Response::json([
