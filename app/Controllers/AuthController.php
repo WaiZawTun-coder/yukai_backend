@@ -1138,7 +1138,7 @@ class AuthController
         $otpcode = trim(Request::input("otp") ?? "");
         $newPassword = Request::input("password") ?? "";
 
-        if (!$email || $otpcode === "" || $newPassword === "") {
+        if ($email === "" || $otpcode === "" || $newPassword === "") {
             Response::json([
                 "status" => false,
                 "message" => "All fields are required"
@@ -1154,7 +1154,7 @@ class AuthController
         $user_id = $getUserIdResult->fetch_assoc()["user_id"];
         PasswordService::isStrong($newPassword);
 
-        if (!self::verifyOTP($user_id, $otpcode)) {
+        if (!self::verifyOTP()) {
             Response::json([
                 "status" => false,
                 "message" => "Invalid or expired OTP"
