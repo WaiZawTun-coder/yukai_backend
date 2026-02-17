@@ -630,7 +630,9 @@ class AuthController
             return;
         }
 
-        $is_active = $result->fetch_assoc()["is_active"] ?? 0;
+        
+        $tokenData = $result->fetch_assoc();
+        $is_active = $tokenData["is_active"] ?? 0;
         if((int) $is_active == 0){
             // Invalid token
             setcookie("refresh_token", "", [
@@ -647,7 +649,6 @@ class AuthController
             ], 401);
             return;
         }
-        $tokenData = $result->fetch_assoc();
 
         // Check expiry
         if (strtotime($tokenData["expires_at"]) < time()) {
