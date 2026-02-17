@@ -770,6 +770,51 @@ class ChatController
             "status" => true,
             "message" => "Muted"
         ]);
+    }
 
+    public static function getUnreadMessageCount()
+    {
+        $conn = Database::connect();
+        $user = Auth::getUser();
+        $me = (int) $user["user_id"];
+        $device_id = $_GET["device_id"] ?? null;
+
+        if (!$device_id) {
+            Response::json(["status" => false, "message" => "device_id required"], 400);
+            return;
+        }
+
+        try {
+            $sql = "
+            SELECT 
+                COUNT(*) AS unread_count
+            FROM messages m
+            JOIN message_payloads mp ON mp.message_id = m.message_id
+            WHERE m.sender_user_id != ?
+              AND mp.recipient_user_id = ?
+              AND mp.recipient_device_id = ?
+              AND mp.status != 'seen'
+              AND m.is_deleted = 0
+        ";
+
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("iis", $me, $me, $device_id);
+            $stmt->execute();
+
+            $result = $stmt->get_result()->fetch_assoc();
+
+            Response::json([
+                "status" => true,
+                "data" => [
+                    "unread_count" => (int) $result["unread_count"]
+                ]
+            ]);
+        } catch (\Throwable $e) {
+            Response::json([
+                "status" => false,
+                "message" => "Failed to get unread message count",
+                "detail" => $e->getMessage()
+            ], 500);
+        }
     }
 }

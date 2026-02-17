@@ -1111,3 +1111,17 @@ Router::add(
     fn() => AuthController::logoutAllDevices(),
     true,
 );
+
+Router::add(
+    "GET",
+    "/api/get-notification-count",
+    fn() => NotificationController::getNotificationCount(),
+    true
+);
+
+Router::add(
+    "GET",
+    "/api/get-unread-message-count",
+    fn() => ChatController::getUnreadMessageCount(),
+    true
+);

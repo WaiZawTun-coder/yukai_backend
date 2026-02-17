@@ -236,6 +236,43 @@ class NotificationController
         }
     }
 
+    public static function getNotificationCount()
+    {
+        $conn = Database::connect();
+        $user = Auth::getUser();
+        $me = (int) $user["user_id"];
+
+        try {
+            $sql = "
+            SELECT 
+                COUNT(*) AS total,
+                SUM(is_read = 0) AS unread
+            FROM notifications
+            WHERE user_id = ?
+        ";
+
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("i", $me);
+            $stmt->execute();
+
+            $result = $stmt->get_result()->fetch_assoc();
+
+            Response::json([
+                "status" => true,
+                "data" => [
+                    "total" => (int) $result["total"],
+                    "unread" => (int) $result["unread"]
+                ]
+            ]);
+        } catch (\Throwable $e) {
+            Response::json([
+                "status" => false,
+                "message" => "Failed to get notification count",
+                "detail" => $e->getMessage()
+            ], 500);
+        }
+    }
+
     private static function getPagination()
     {
         $page = max(1, (int) ($_GET['page'] ?? 1));
