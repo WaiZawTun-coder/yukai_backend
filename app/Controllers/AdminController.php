@@ -1232,7 +1232,7 @@ class AdminController
 
         $refreshHash = hash("sha256", $refreshToken);
 
-        $stmt = $conn->prepare("SELECT art.token_id, art.admin_id, art.expires_at, a.username, a.role FROM admin_refresh_tokens art JOIN admin a ON a.admin_id = art.admin_id WHERE art.refresh_token = ? AND art.revoked = 0 LIMIT 1
+        $stmt = $conn->prepare("SELECT art.token_id, art.admin_id, art.expires_at, a.username, a.role, a.is_active FROM admin_refresh_tokens art JOIN admin a ON a.admin_id = art.admin_id WHERE art.refresh_token = ? AND art.revoked = 0 LIMIT 1
         ");
 
         $stmt->bind_param("s", $refreshHash);
@@ -1252,6 +1252,24 @@ class AdminController
                 "status" => false,
                 "message" => "Invalid refresh token"
             ], 401);
+        }
+
+        $is_active = $result->fetch_assoc()["is_active"] ?? 0;
+        if((int) $is_active == 0){
+            // Invalid token
+            setcookie("refresh_token", "", [
+                "expires" => time() - 3600,
+                "path" => "/",
+                "secure" => $isSecure,
+                "httponly" => true,
+                "samesite" => $isSecure ? "None" : "Lax",
+            ]);
+
+            Response::json([
+                "status" => false,
+                "message" => "Account is banned"
+            ], 401);
+            return;
         }
 
         $tokenData = $result->fetch_assoc();

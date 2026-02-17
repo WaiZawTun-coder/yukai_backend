@@ -603,7 +603,7 @@ class AuthController
 
         // Lookup in refresh_tokens table
         $stmt = $conn->prepare("
-        SELECT rt.id, rt.user_id, rt.expires_at, u.username
+        SELECT rt.id, rt.user_id, rt.expires_at, u.username, u.is_active
         FROM refresh_tokens rt
         JOIN users u ON u.user_id = rt.user_id
         WHERE rt.token_hash = ? AND rt.revoked = 0
@@ -630,6 +630,23 @@ class AuthController
             return;
         }
 
+        $is_active = $result->fetch_assoc()["is_active"] ?? 0;
+        if((int) $is_active == 0){
+            // Invalid token
+            setcookie("refresh_token", "", [
+                "expires" => time() - 3600,
+                "path" => "/",
+                "secure" => $isSecure,
+                "httponly" => true,
+                "samesite" => $isSecure ? "None" : "Lax",
+            ]);
+
+            Response::json([
+                "status" => false,
+                "message" => "Account is banned"
+            ], 401);
+            return;
+        }
         $tokenData = $result->fetch_assoc();
 
         // Check expiry
