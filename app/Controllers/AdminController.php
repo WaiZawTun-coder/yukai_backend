@@ -275,7 +275,7 @@ class AdminController
         if (!$creator || $creator_role !== 'super_admin') {
             Response::json([
                 "status" => false,
-                "message" => "Only superAdmin can create admin accounts"
+                "message" => "Only Super Admin can create admin accounts"
             ]);
         }
 
@@ -383,7 +383,7 @@ class AdminController
         if (!PasswordService::verify($password, $user['password'])) {
             Response::json([
                 "status" => false,
-                "message" => "Invalid password"
+                "message" => "Incorrect password"
             ]);
         }
 
@@ -401,8 +401,7 @@ class AdminController
         $accessToken = TokenService::generateAccessToken([
             "admin_id" => $user['admin_id'],
             "username" => $user['username'],
-            "role" => $user['role'],
-
+            "role" => $user["role"],
         ]);
 
         $isSecure =
@@ -446,6 +445,80 @@ class AdminController
 
             ]
         ]);
+    }
+
+    public static function setPassword(){
+        $conn = Database::connect();
+
+        $email = trim(Request::input("email") ?? "");
+
+        if(empty($email)){
+            Response::json([
+                "status" => false,
+                "message" => "Unknown user"
+            ], 400);
+            return;
+        }
+
+        $otp = trim(Request::input("otp") ?? "");
+        if(empty($otp)){
+            Response::json([
+                "status" => false,
+                "message" => "OTP code is required"
+            ], 400);
+            return;
+        }
+
+        $password = trim(Request::input("password") ?? "");
+        if(empty($password)){
+            Response::json([
+                "status" => false,
+                "message" => "Password cannot be empty"
+            ], 400);
+            return;
+        }
+
+        $getUserIdSql = "SELECT admin_id FROM admin WHERE email = ? OR username = ? AND is_active = 1";
+        $stmt = $conn->prepare($getUserIdSql);
+        $stmt->bind_param("ss",$email, $email);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $adminId = $result->fetch_assoc()["admin_id"] ?? 0;
+
+        if($adminId == 0){
+            Response::json([
+                "status" => false,
+                "message" => "User not found or is banned"
+            ], 404);
+            return;
+        }
+
+        PasswordService::isStrong($password);
+
+        if(!self::verifyOTP($adminId, $otp)){
+            Response::json([
+                "status" => false,
+                "message" => "Invalid or expired OTP"
+            ], 400);
+            return;
+        }
+
+        $hashedPassword = PasswordService::hash($password);
+        $stmt = $conn->prepare("UPDATE admin SET password = ? WHERE admin_id = ?");
+        $stmt->bind_param("si", $hashedPassword, $adminId);
+        if($stmt->execute()){
+            Response::json([
+                "status" => true,
+                "message" => "Password updated successfully please login with new password"
+            ]);
+            return;
+        }else{
+            Response::json([
+                "status" => false,
+                "message" => "Failed to set password"
+            ], 500);
+        }
+        
     }
 
 
@@ -629,14 +702,14 @@ class AdminController
         if (!$user) {
             Response::json([
                 "status" => false,
-                "message" => "User not found"
+                "message" => "User not found or is banned"
             ], 404);
         }
 
         if ($user['role'] === 'super_admin') {
             Response::json([
                 "status" => false,
-                "message" => "superAdmin cannot reset his own password"
+                "message" => "Super Admin cannot reset his own password"
             ]);
         }
 
@@ -1259,6 +1332,14 @@ class AdminController
     {
         $conn = Database::connect();
         $admin = AdminAuth::admin();
+
+        if(!$admin){
+            Response::json([
+                "status" => false,
+                "message" => "Unauthorized"
+            ], 401);
+        }
+
         $adminId = $admin["admin_id"];
 
 

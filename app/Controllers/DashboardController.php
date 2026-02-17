@@ -13,15 +13,15 @@ class DashboardController
 
         // Check admin login
         $admin = AdminAuth::admin();
-        $admin_id = $admin["admin_id"] ?? null;
 
-        if (!$admin_id) {
+        if (!$admin) {
             Response::json([
                 "status" => false,
                 "message" => "Not authorized"
             ], 401);
             return;
         }
+        $admin_id = $admin["admin_id"] ?? null;
 
         try {
 

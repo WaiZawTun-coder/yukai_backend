@@ -872,22 +872,29 @@ Router::add("POST", "/api/unban-admin", fn() => AdminController::unbanAdmin(), t
 
 Router::add(
     "POST",
-    "/api/admin/register",
+    "/auth/admin/register",
     fn() =>
     AdminController::AdminRegister(),
     true
 );
 Router::add(
     "POST",
-    "/api/adminLogin",
+    "/auth/admin-login",
     fn() =>
     AdminController::AdminLogin(),
     false
-
 );
+
 Router::add(
     "POST",
-    "/api/admin-forget-password",
+    "/auth/admin/setup-password",
+    fn() => AdminController::setPassword(),
+    false
+);
+
+Router::add(
+    "POST",
+    "/auth/admin/forget-password",
     fn() =>
     AdminController::forgetPassword(),
     false

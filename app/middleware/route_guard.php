@@ -26,7 +26,7 @@ function route_guard()
     try {
         $secret = $_ENV["JWT_SECRET"];
         $decoded = JWT::decode($token, $secret);
-        if(isset($decoded["role"]) && ($decoded["role"] == "admin" || $decoded["role"] == "super_admin")){
+        if(isset($decoded["role"]) && ($decoded["role"] == "moderator" || $decoded["role"] == "super_admin")){
             AdminAuth::setAdmin($decoded);
         }else{
         Auth::setUser($decoded);}
