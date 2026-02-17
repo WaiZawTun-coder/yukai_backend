@@ -1254,24 +1254,6 @@ class AdminController
             ], 401);
         }
 
-        $is_active = $result->fetch_assoc()["is_active"] ?? 0;
-        if((int) $is_active == 0){
-            // Invalid token
-            setcookie("refresh_token", "", [
-                "expires" => time() - 3600,
-                "path" => "/",
-                "secure" => $isSecure,
-                "httponly" => true,
-                "samesite" => $isSecure ? "None" : "Lax",
-            ]);
-
-            Response::json([
-                "status" => false,
-                "message" => "Account is banned"
-            ], 401);
-            return;
-        }
-
         $tokenData = $result->fetch_assoc();
 
         $checkAdminSql = "SELECT is_active FROM admin WHERE admin_id = ?";
