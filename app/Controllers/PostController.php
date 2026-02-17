@@ -2102,21 +2102,18 @@ GROUP BY p.post_id
                     ON hp.post_id = p.post_id
                     AND hp.user_id = ?
 
-                LEFT JOIN friends f
-                    ON (
-                        (f.user_1_id = p.creator_user_id AND f.user_2_id = ?)
-                        OR (f.user_2_id = p.creator_user_id AND f.user_1_id = ?)
-                    )
-                    AND f.status = 'accepted'
+                JOIN friends f
+    ON (
+        (f.user_1_id = p.creator_user_id AND f.user_2_id = ?)
+        OR (f.user_2_id = p.creator_user_id AND f.user_1_id = ?)
+    )
+    AND f.status = 'accepted'
                 WHERE p.is_deleted = 0
-                    AND p.is_archived = 0
-                    AND p.is_draft = 0
-                    AND p.is_banned = 0
-                    AND p.creator_user_id != ?
-                    AND (
-                          p.privacy = 'public'
-                          OR (p.privacy = 'friends' AND f.friend_id IS NOT NULL)
-                        )
+    AND p.is_archived = 0
+    AND p.is_draft = 0
+    AND p.is_banned = 0
+    AND p.creator_user_id != ?
+
 
                     GROUP BY p.post_id
                     ORDER BY total_engagement DESC, p.created_at DESC
