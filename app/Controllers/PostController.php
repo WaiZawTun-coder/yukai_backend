@@ -171,6 +171,7 @@ LEFT JOIN hide_posts hp
 WHERE p.is_deleted = 0
   AND p.is_archived = 0
   AND p.is_draft = 0
+  AND p.is_banned = 0
   AND hp.post_id IS NULL
 
   AND (
@@ -323,6 +324,7 @@ LEFT JOIN hide_posts hp
 WHERE p.is_deleted = 0
   AND p.is_archived = 0
   AND p.is_draft = 0
+  AND p.is_banned = 0
   AND cu.username = ?
   AND hp.post_id IS NULL
   AND (
@@ -489,6 +491,7 @@ LIMIT ? OFFSET ?;
         WHERE p.is_deleted = 0
           AND p.is_archived = 0
           AND p.is_draft = 0
+          AND p.is_banned = 0
           AND hp.post_id IS NULL
 
           AND (
@@ -646,6 +649,7 @@ WHERE
     AND p.is_deleted = 0
     AND p.is_archived = 0
     AND p.is_draft = 0
+    AND p.is_banned = 0
     AND hp.post_id IS NULL
     AND (
         p.privacy = 'public'
@@ -2098,22 +2102,21 @@ GROUP BY p.post_id
                     ON hp.post_id = p.post_id
                     AND hp.user_id = ?
 
+                LEFT JOIN friends f
+                    ON (
+                        (f.user_1_id = p.creator_user_id AND f.user_2_id = ?)
+                        OR (f.user_2_id = p.creator_user_id AND f.user_1_id = ?)
+                    )
+                    AND f.status = 'accepted'
                 WHERE p.is_deleted = 0
                     AND p.is_archived = 0
                     AND p.is_draft = 0
-                    AND hp.post_id IS NULL
+                    AND p.is_banned = 0
                     AND p.creator_user_id != ?
-
-                    AND ((p.privacy = 'friends' AND EXISTS (
-                            SELECT 1 FROM friends f WHERE f.status = 'accepted'
-                                AND (
-                                    (f.user_1_id = p.creator_user_id AND f.user_2_id = ?)
-                                    OR (f.user_2_id = p.creator_user_id AND f.user_1_id = ?)
-                                )
-                                AND p.privacy = 'public'
-                        ))
-                        OR (p.privacy='private' AND p.creator_user_id = ?)
-                    )
+                    AND (
+                          p.privacy = 'public'
+                          OR (p.privacy = 'friends' AND f.friend_id IS NOT NULL)
+                        )
 
                     GROUP BY p.post_id
                     ORDER BY total_engagement DESC, p.created_at DESC
@@ -2121,7 +2124,7 @@ GROUP BY p.post_id
 
         ";
         $stmtSave = $conn->prepare($sql);
-        $stmtSave->bind_param("iiiiiiii", $user_id, $user_id, $user_id, $user_id, $user_id, $user_id, $limit, $offset);
+        $stmtSave->bind_param("iiiiiii",  $user_id, $user_id, $user_id, $user_id, $user_id, $limit, $offset);
         $stmtSave->execute();
 
         if ($stmtSave->error) {

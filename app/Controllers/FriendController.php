@@ -444,6 +444,7 @@ class FriendController
               WHERE status IN ('accepted','pending')
                 AND ? IN (user_1_id, user_2_id)
           )
+          AND u.is_active = 1
           AND u.user_id NOT IN (
               SELECT blocked_user_id FROM blocks WHERE blocker_user_id = ?
               UNION
@@ -546,6 +547,7 @@ class FriendController
           UNION
           SELECT blocker_user_id FROM blocks WHERE blocked_user_id = ?
       )
+      AND u.is_active = 1
 
     ORDER BY score DESC, u.created_at DESC
     LIMIT ? OFFSET ?
