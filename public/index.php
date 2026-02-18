@@ -5,7 +5,8 @@ $allowedOrigins = [
     "http://localhost:8080",
     "https://yukai-social.vercel.app",
     "https://yukai-socket.onrender.com",
-    "https://yukai-admin.vercel.app"
+    "https://yukai-admin.vercel.app",
+    "https://yukaifrontend-production.up.railway.app"
 ];
 
 if (isset($_SERVER['HTTP_ORIGIN']) && in_array($_SERVER['HTTP_ORIGIN'], $allowedOrigins)) {
