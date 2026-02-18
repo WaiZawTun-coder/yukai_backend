@@ -1,6 +1,7 @@
 <?php
 
 use App\Core\AdminAuth;
+use App\Core\Database;
 use App\Core\JWT;
 use App\Core\Auth;
 
@@ -29,7 +30,26 @@ function route_guard()
         if(isset($decoded["role"]) && ($decoded["role"] == "moderator" || $decoded["role"] == "super_admin")){
             AdminAuth::setAdmin($decoded);
         }else{
-        Auth::setUser($decoded);}
+            Auth::setUser($decoded);
+
+            if(!$decoded["user_id"]){
+                http_response_code(401);
+                echo json_encode(["status" => false, "message" => "Invalid Token"]);
+                exit;
+            }
+
+            $sql = "SELECT user_id FROM users WHERE user_id = ? AND is_active = 1";
+            $stmt = Database::connect()->prepare($sql);
+            $stmt->bind_param("i", $decoded["user_id"]);
+
+            $stmt->execute();
+            $result = $stmt->get_result();
+            if($result->num_rows == 0){
+                http_response_code(403);
+                echo json_encode(["status"=> false,"message"=> "Account is banned."]);
+                exit;
+            }
+        }
         return $decoded;
     } catch (Exception $e) {
         http_response_code(401);

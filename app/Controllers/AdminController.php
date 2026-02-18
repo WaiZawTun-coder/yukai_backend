@@ -442,7 +442,7 @@ class AdminController
                 "is_active" => $user["is_active"],
                 "last_seen" => $user["last_seen"],
                 "access_token" => $accessToken,
-
+                "profile_image" => $user["profile_image"]
             ]
         ]);
     }
