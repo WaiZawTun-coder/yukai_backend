@@ -115,7 +115,7 @@ class UserController
             END AS request_direction
 
         FROM users u
-        WHERE u.username = ? or u.user_id = ?
+        WHERE u.username = ? or u.user_id = ? AND u.is_active = 1
         LIMIT 1
     ";
 
