@@ -1125,3 +1125,10 @@ Router::add(
     fn() => ChatController::getUnreadMessageCount(),
     true
 );
+
+Router::add(
+    "GET",
+    "/api/get-blocked-users",
+    fn() => FriendController::getBlockedUsers(),
+    true
+);

@@ -739,9 +739,11 @@ class FriendController
     public static function unblockUser()
     {
         $conn = Database::connect();
-        $input = Request::json();
-        $unblock_user = (int) ($input['unblock_user'] ?? 0);
-        $unblocked_user = (int) ($input['unblocked_user'] ?? 0);
+
+        $user = Auth::getUser();
+        $unblock_user = $user["user_id"];
+
+        $unblocked_user = (int) (Request::input('user_id') ?? 0);
         if ($unblock_user === $unblocked_user || $unblock_user === 0 || $unblocked_user === 0) {
             Response::json([
                 "status" => false,
@@ -755,7 +757,7 @@ class FriendController
         if ($unblockuser->affected_rows > 0) {
             Response::json([
                 "status" => true,
-                "message" => "Unblock this user"
+                "message" => "Unblocked user"
             ]);
         } else {
             Response::json([
@@ -951,5 +953,40 @@ class FriendController
             $conn->rollback();
             return null;
         }
+    }
+
+    public static function getBlockedUsers(){
+        $conn =Database::connect();
+        $user = Auth::getUser();
+
+        if(!$user){
+            Response::json([
+                "status" => false,
+                "message" => "Unauthorized user"
+            ], 401);
+            return;
+        }
+        $user_id = $user["user_id"];
+
+        $stmt = $conn->prepare("SELECT u.user_id, u.username, u.display_name, u.gender, u.profile_image FROM blocks b JOIN users u on u.user_id = b.blocked_user_id WHERE b.blocker_user_id = ?");
+        $stmt->bind_param("i", $user_id);
+
+        $stmt->execute();
+
+        $result = $stmt->get_result();
+
+        $blocked_list = [];
+
+        while($row = $result->fetch_assoc()){
+            $blocked_list[] = $row;
+        }
+
+        Response::json([
+            "status" => true,
+            "message" => "Block list",
+            "data" => $blocked_list
+        ]);
+
+
     }
 }
