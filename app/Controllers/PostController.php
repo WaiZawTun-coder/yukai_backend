@@ -326,7 +326,6 @@ WHERE p.is_deleted = 0
   AND p.is_archived = 0
   AND p.is_draft = 0
   AND p.is_banned = 0
-  AND u.is_active = 1
   AND cu.username = ?
   AND hp.post_id IS NULL
   AND (
