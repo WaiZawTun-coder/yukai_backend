@@ -185,6 +185,34 @@ class ChatController
         $userStmt->execute();
         $target = $userStmt->get_result()->fetch_assoc();
 
+        // Check if blocked either way
+$blockStmt = $conn->prepare("
+    SELECT 1 
+    FROM blocks
+    WHERE 
+        (blocker_user_id = ? AND blocked_user_id = ?)
+        OR
+        (blocker_user_id = ? AND blocked_user_id = ?)
+    LIMIT 1
+");
+$blockStmt->bind_param(
+    "iiii",
+    $me,           // I blocked
+    $target["user_id"],
+    $target["user_id"], // They blocked me
+    $me
+);
+$blockStmt->execute();
+
+if ($blockStmt->get_result()->fetch_row()) {
+    Response::json([
+        "status" => false,
+        "message" => "Cannot chat with this user"
+    ], 403);
+    return;
+}
+
+
         if (!$target) {
             Response::json(["status" => false, "message" => "User not found"], 404);
             return;
