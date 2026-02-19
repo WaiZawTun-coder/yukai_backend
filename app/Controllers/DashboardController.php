@@ -74,6 +74,17 @@ class DashboardController
                 WHERE status = 'pending'
             ")->fetch_assoc()["total"];
 
+            $totalAccountReports = $conn->query("
+                SELECT COUNT(*) AS total
+                FROM reported_accounts
+            ")->fetch_assoc()["total"];
+
+            $pendingAccountReports = $conn->query("
+                SELECT COUNT(*) AS total
+                FROM reported_accounts
+                WHERE status = 'pending'
+            ")->fetch_assoc()["total"];
+
 
             /* ------------------ User Growth ------------------ */
 
@@ -176,8 +187,12 @@ class DashboardController
                         "dailyUsers" => (int)$dailyUsers,
                         "averageUsers" => (float)$avgUsers,
                         "totalPosts" => (int)$totalPosts,
-                        "totalReports" => (int)$totalReports,
-                        "pendingReports" => (int)$pendingReports
+                        "totalReports" => (int)($totalReports + $totalAccountReports),
+                        "pendingReports" => (int)($pendingReports + $totalAccountReports),
+                        "totalPostReports" => (int)$totalReports,
+                        "pendingPostReports" => (int)$pendingReports,
+                        "totalAccountReports" => (int)$totalAccountReports,
+                        "pendingAccountReports" => (int)$pendingAccountReports
                     ],
                     "userGrowth" => $userGrowth,
                     "postsCreated" => $postsCreated,
